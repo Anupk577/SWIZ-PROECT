@@ -1,0 +1,425 @@
+{
+  "schemaVersion": 1,
+  "project": "Swiz Smart",
+  "guideVersion": "1.0",
+  "implementationDate": "2026-09-02",
+  "capturedAtUTC": "2026-09-02T10:34:50.665344+00:00",
+  "gitRevision": null,
+  "gitRevisionReason": "No Git metadata was present in the inspected repository folder.",
+  "scope": "Developer guide implementation reference: active source trees, generated frontend ABI, tests, scripts, configuration examples, package locks and current handover documentation. Inclusion records identity, not exhaustive security coverage.",
+  "excluded": [
+    "Private environment files and credentials",
+    "node_modules, compiler artifacts, caches and generated contract types",
+    "Legacy archives, old deployment artifacts, old architecture documents and obsolete JSON transaction store",
+    "Browser fixtures and external validation logs"
+  ],
+  "historicalFileIncludedForIdentificationOnly": [
+    "smartContract/scripts/deployAmoyAll.ts"
+  ],
+  "sow": {
+    "title": "Swiz Smart \u2014 Token Development Inputs and Scope Confirmation",
+    "version": "1.1",
+    "attachmentName": "pasted-text.txt",
+    "bytes": 15021,
+    "sha256": "31171c40e2e4dd2e1e4424d0c6a92bda2049dd1f2e01510278d5ae70d2de62d4",
+    "authority": "Supplied requirements and open confirmation items; not evidence that every proposal was approved."
+  },
+  "fileCount": 79,
+  "files": [
+    {
+      "path": "Backend/.env.example",
+      "bytes": 182,
+      "sha256": "42103492f229b37beaab0a735518357974f5f6babfb4f739771959eddd68aadb"
+    },
+    {
+      "path": "Backend/package-lock.json",
+      "bytes": 34659,
+      "sha256": "e75f96ba4385f5df81b6ef0148cec569204767feb6e19bbe4ec771d6f33aeeae"
+    },
+    {
+      "path": "Backend/package.json",
+      "bytes": 285,
+      "sha256": "12a1184beedc37c549fa9de475a8ffd89a5c533efb5433f0b6e5fb74c3e4dd2a"
+    },
+    {
+      "path": "Backend/src/bridge.js",
+      "bytes": 6189,
+      "sha256": "238212705b1cc8bad10b53fe736d235f1cc32314ffaa6a89c37eaa7c7d0e03c0"
+    },
+    {
+      "path": "Backend/src/config.js",
+      "bytes": 1157,
+      "sha256": "4f59466ed54eace4b9464d963ba076937bfc077e7309b3202e3bde75e8984549"
+    },
+    {
+      "path": "Backend/src/db/index.js",
+      "bytes": 3063,
+      "sha256": "218c8818b62de7eee7bd715a568c04bf208297831f24dca37d8885b11c960346"
+    },
+    {
+      "path": "Backend/src/index.js",
+      "bytes": 1488,
+      "sha256": "07b32eb0b211792cd39cfded08961239d2d4a372e4fe3457e239667a6d3fb61a"
+    },
+    {
+      "path": "Backend/src/protocol.js",
+      "bytes": 3216,
+      "sha256": "218dfedb910c04815ba3b6bf462f16e53e6b6588eac3da6e325dc7ce02543e35"
+    },
+    {
+      "path": "Backend/src/routes/api.js",
+      "bytes": 2230,
+      "sha256": "dc107ea77e5666c0cea7f1f3b0574492f8240418d375282239c0202647974644"
+    },
+    {
+      "path": "Backend/test/api.test.js",
+      "bytes": 1147,
+      "sha256": "d6dda6d44d1a03a45cc71daec9ac36bfcbdfe297fd1ff2eff911e54eeeb3a536"
+    },
+    {
+      "path": "Backend/test/bridge.test.js",
+      "bytes": 1705,
+      "sha256": "c69e28ee58114bb9f14e98cb2348522d384fe16d34f9c6e6e62dc7ef87313b31"
+    },
+    {
+      "path": "Backend/test/store.test.js",
+      "bytes": 1116,
+      "sha256": "6e8d919375280e8756760c54e53f891e12f37d0a892a5df969bcc3047eebdea2"
+    },
+    {
+      "path": "IMPLEMENTATION.md",
+      "bytes": 9834,
+      "sha256": "110ddc7719b5b1b26de18b79e3408f85d2e21af6477ff8cf450594c6437f99a4"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1053,
+      "sha256": "534f0f50d17861aa8582c94b0d14d0304c5f6027533105dc38336749c72b974f"
+    },
+    {
+      "path": "config/deployment.example.json",
+      "bytes": 950,
+      "sha256": "f3478da193032f0bab90a1861bf0b8411e93adbd267babbc3bc326ae09700886"
+    },
+    {
+      "path": "frontEnd/.env.example",
+      "bytes": 230,
+      "sha256": "360555ab6550ae2ef218797296d2cff8922c95f003743a5896ada8a860e1a3ab"
+    },
+    {
+      "path": "frontEnd/index.html",
+      "bytes": 427,
+      "sha256": "3d27cd257275d85d7ec71b041866f41c8dd78cd3605308a8b635a9a9b8e4d163"
+    },
+    {
+      "path": "frontEnd/package-lock.json",
+      "bytes": 219694,
+      "sha256": "5c0b4ae31bfd3902d2f55913480c483a0a5542269240b71f7f07dfab4d637b62"
+    },
+    {
+      "path": "frontEnd/package.json",
+      "bytes": 1012,
+      "sha256": "d329e57e3f4ca5b03ecdb5c44eafd7c6514660c1092749485215634393b5c06d"
+    },
+    {
+      "path": "frontEnd/src/App.css",
+      "bytes": 2891,
+      "sha256": "4198156041dd4cada6d4d9c2e8786e4bf6b7d70de485101a4c56bf667b67a1ad"
+    },
+    {
+      "path": "frontEnd/src/App.tsx",
+      "bytes": 1901,
+      "sha256": "c9d4883be440bcabee538008745e8b3e1bbfa45f7c6fb96532f782086d0b081c"
+    },
+    {
+      "path": "frontEnd/src/assets/hero.png",
+      "bytes": 13057,
+      "sha256": "881ffbcaafc212e49addad08846a5b82761355fa20624253af3477ba33262c5c"
+    },
+    {
+      "path": "frontEnd/src/assets/react.svg",
+      "bytes": 4126,
+      "sha256": "35ef61ed53b323ae94a16a8ec659b3d0af3880698791133f23b084085ab1c2e5"
+    },
+    {
+      "path": "frontEnd/src/assets/vite.svg",
+      "bytes": 8709,
+      "sha256": "5be21acd42eb7b896e517f4e0f0f11eb5c5d9e54fbbcebe9453f033008fcca6f"
+    },
+    {
+      "path": "frontEnd/src/components/AdminPanelSection.tsx",
+      "bytes": 3439,
+      "sha256": "b1f394ad72d7cc17e99f0ee18e6b31cdc7bbb38d3f553956f72b163a0badb0f8"
+    },
+    {
+      "path": "frontEnd/src/components/BuyTokensSection.tsx",
+      "bytes": 21637,
+      "sha256": "5fd5698359110cdce13c282ff0af73b55b25eaa0da75e075b9e21467c2053a2a"
+    },
+    {
+      "path": "frontEnd/src/components/EcosystemRewardsSection.tsx",
+      "bytes": 3649,
+      "sha256": "d63837bdd4242dc4ee0e0427708b1938b28f0d177cabb37904c6e8695550d64a"
+    },
+    {
+      "path": "frontEnd/src/components/Footer.tsx",
+      "bytes": 2195,
+      "sha256": "18431c6152e4815dd31ca1243fc9646dd9e723891a60abb17d65bafa7e3a5ecd"
+    },
+    {
+      "path": "frontEnd/src/components/Hero3DCanvas.tsx",
+      "bytes": 6150,
+      "sha256": "7d0fe979635c6920f1c08ad8ce4678ffda59223268949f1fdae76ca68cb90dab"
+    },
+    {
+      "path": "frontEnd/src/components/HeroStats.tsx",
+      "bytes": 8848,
+      "sha256": "8a574d27ddd54ef7c1912128cab99d522fb1aa429b0a1ab8012692a99b0fc3f1"
+    },
+    {
+      "path": "frontEnd/src/components/Navbar.tsx",
+      "bytes": 5151,
+      "sha256": "954db1e3535e00116e287a17e8198dfaf0f53501219e678c74c7f8177f635848"
+    },
+    {
+      "path": "frontEnd/src/components/ProtocolAnalyticsCharts.tsx",
+      "bytes": 5512,
+      "sha256": "5cfaf9eb775dc7314f8bd4b4a66a6eb4afa9e844a54e03dd2492029da5dca408"
+    },
+    {
+      "path": "frontEnd/src/components/ProtocolOperations.tsx",
+      "bytes": 19907,
+      "sha256": "9a838c6f5960548c0706dc6a65bec79dcf10431e43f7181b1e1b974403e07714"
+    },
+    {
+      "path": "frontEnd/src/components/ScrollToTop.tsx",
+      "bytes": 278,
+      "sha256": "1bbf6a6840172bcb22185aeba35d26473894d3d9a6433c342516ac0a1492322e"
+    },
+    {
+      "path": "frontEnd/src/components/StakingPackagesSection.tsx",
+      "bytes": 7928,
+      "sha256": "1be13aea2da08f159c52c0c1b653fd55c22c6a82f7317a3afba49c1b3cef604a"
+    },
+    {
+      "path": "frontEnd/src/components/SwizLogo.tsx",
+      "bytes": 2488,
+      "sha256": "b122a8918d4faf684f3aaa4ebed58008aa6ca4ec476543584dd84e0da14902d1"
+    },
+    {
+      "path": "frontEnd/src/components/TransactionHistorySection.tsx",
+      "bytes": 183,
+      "sha256": "3f131e48c60c5b2635c1cd58ae6b13a7c81b9f1afc325feb8ae1045b8f07bac1"
+    },
+    {
+      "path": "frontEnd/src/components/UserPortfolioCharts.tsx",
+      "bytes": 3342,
+      "sha256": "359c377fc1ae46f44de8cf4b2b21e02d699b06e8f2f43c43448ba3759c91c7c7"
+    },
+    {
+      "path": "frontEnd/src/components/WalletModal.tsx",
+      "bytes": 3393,
+      "sha256": "eff2964476ac66cc9837f1c1f602a2081ee6ee1113bde9184403a23b32488d60"
+    },
+    {
+      "path": "frontEnd/src/config/reown.ts",
+      "bytes": 781,
+      "sha256": "19746e66821cc345b67f609a63cc32fd818c04e12471ce809a8a1a68739c2883"
+    },
+    {
+      "path": "frontEnd/src/constants/abis.json",
+      "bytes": 67951,
+      "sha256": "9a5013953046ccdb49c357f7468b1e1335bb7ce9b2364758113fc305446d1bb6"
+    },
+    {
+      "path": "frontEnd/src/constants/contracts.ts",
+      "bytes": 1374,
+      "sha256": "44696c8fa6b3c8d77877d7232a16a3acc8e4171aaa1f548ae4930d8e34549a7c"
+    },
+    {
+      "path": "frontEnd/src/context/Web3Context.tsx",
+      "bytes": 11461,
+      "sha256": "905e6dfe9401fd6912cfdc3f14108b1a9e5b7c2fb8d73355606889e2dd768507"
+    },
+    {
+      "path": "frontEnd/src/hooks/useUiData.ts",
+      "bytes": 1753,
+      "sha256": "239ae7339e4967345d80805bddf15959d7fba85c2ab4b5d9489f9c899db6514d"
+    },
+    {
+      "path": "frontEnd/src/index.css",
+      "bytes": 7634,
+      "sha256": "77ef5e90d8f688b82c4628e43f9bc2d8d57403088e00d6eb75b94f9a005c0dcb"
+    },
+    {
+      "path": "frontEnd/src/main.tsx",
+      "bytes": 234,
+      "sha256": "dc3caf5760f907861c5bd3cef2038b7a2d040b7711cc511f099433da8c3f177a"
+    },
+    {
+      "path": "frontEnd/src/pages/AdminPage.tsx",
+      "bytes": 243,
+      "sha256": "74f52a1e5e33a924447330a07b04229fa8a7a9f3096957135df16d4b57ce900a"
+    },
+    {
+      "path": "frontEnd/src/pages/BuyTokenPage.tsx",
+      "bytes": 520,
+      "sha256": "132dcc73ec47ecf2414a1edbf7a44e7f25e92381c2dbf4370e18f28ec4558d52"
+    },
+    {
+      "path": "frontEnd/src/pages/DashboardPage.tsx",
+      "bytes": 18898,
+      "sha256": "e10caceac861b5592c0c42d5e97d17b97b6ea031328a809dce1ce2f51749bdc8"
+    },
+    {
+      "path": "frontEnd/src/pages/HomePage.tsx",
+      "bytes": 13857,
+      "sha256": "22e45f46bcf9f633cd2be8bd251e3f2ce0d180697b7bb50e07ab5134b0eede13"
+    },
+    {
+      "path": "frontEnd/src/services/api.ts",
+      "bytes": 850,
+      "sha256": "1cf3ce0513e8aef1f755b97fe5abb0e9dd0a2071730643f20e810b98a0a61aef"
+    },
+    {
+      "path": "frontEnd/src/services/http.ts",
+      "bytes": 1008,
+      "sha256": "f1f8ea212589b36bfa7ababd88973206a2101e2ba957d124a71ed502f9fb3f01"
+    },
+    {
+      "path": "frontEnd/src/types/index.ts",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "frontEnd/test/http.test.ts",
+      "bytes": 2402,
+      "sha256": "096a04e7dee8998b131d9e9ad628a41263ec5986c5497dc6fb4230685cb50913"
+    },
+    {
+      "path": "frontEnd/tsconfig.app.json",
+      "bytes": 644,
+      "sha256": "3d972e46410867dfc6dc480524dd319feb7ef01cd4ea77ce367e93097610ad77"
+    },
+    {
+      "path": "frontEnd/tsconfig.json",
+      "bytes": 119,
+      "sha256": "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808"
+    },
+    {
+      "path": "frontEnd/tsconfig.node.json",
+      "bytes": 547,
+      "sha256": "afc4620f8c23f3cd5dda3726408cf705438a054db22ccf0e09ff73eacef601ab"
+    },
+    {
+      "path": "frontEnd/vercel.json",
+      "bytes": 167,
+      "sha256": "b9a1dc718d23940d3bfc654dbd3aa05aaa7358224a6c2d0ac9a2f6ad6a5a8041"
+    },
+    {
+      "path": "frontEnd/vite.config.ts",
+      "bytes": 261,
+      "sha256": "4a5170be380606e4d929677da0d9bba2f9ef269a51e460012b7404e1afbde42d"
+    },
+    {
+      "path": "package.json",
+      "bytes": 309,
+      "sha256": "7c6bfa2d6b2be0cb6adefa915ede4eb4cefb5b17dd049eda9fc271a51fbcc09d"
+    },
+    {
+      "path": "smartContract/.env.example",
+      "bytes": 377,
+      "sha256": "599bd15cc27e37917a9047008b36ecf140a3503e3652ae63ec99bad4759bd80e"
+    },
+    {
+      "path": "smartContract/contracts/EcosystemToken.sol",
+      "bytes": 1184,
+      "sha256": "167c9f2b895e54e2c5564ae4c4c19a7ed31afbb12341d2701cf9335bc4fb9117"
+    },
+    {
+      "path": "smartContract/contracts/SZToken.sol",
+      "bytes": 17802,
+      "sha256": "25e48ad5e47afc0afe3de70c3807d7588b9b2d705480bcb12ee8c0d3a12ae14d"
+    },
+    {
+      "path": "smartContract/contracts/SourceDepositAdapter.sol",
+      "bytes": 3079,
+      "sha256": "06d6e2b4556b9c57f2b75847560300fd4b026947b1ec18baf6cf3da6b54ae212"
+    },
+    {
+      "path": "smartContract/contracts/USDTcWrapper.sol",
+      "bytes": 3910,
+      "sha256": "d4de2bbb762aea2bc6de0e47b5557c1f9c9d32ccf20588a6b224f624d767d8ba"
+    },
+    {
+      "path": "smartContract/contracts/mocks/MockUSDT.sol",
+      "bytes": 640,
+      "sha256": "4ed46a9307199af68786a978ace335c10390c7a1b2a01f1ec383e4696725e724"
+    },
+    {
+      "path": "smartContract/hardhat.config.ts",
+      "bytes": 2614,
+      "sha256": "b0b71cf1c3a88ed7852cdbfd6fe1643777002695a0b2483cc493cc02e551a1e9"
+    },
+    {
+      "path": "smartContract/package-lock.json",
+      "bytes": 144781,
+      "sha256": "e5e662806760ba388312a5645c002e8c85921da136b98d21a36b2b4c6238faea"
+    },
+    {
+      "path": "smartContract/package.json",
+      "bytes": 1025,
+      "sha256": "e645d3b3246206c35730a4e7519a758bc87b99d4c0162ee357325d23d23cf152"
+    },
+    {
+      "path": "smartContract/scripts/configureSources.ts",
+      "bytes": 904,
+      "sha256": "85463f34af8244a7dede3567e136236ab95c56d28ed91a815e3e9667e7a6ada9"
+    },
+    {
+      "path": "smartContract/scripts/deployAmoyAll.ts",
+      "bytes": 3226,
+      "sha256": "7c4276a65aa14842af635df209b4ac017ffe1cac421a855eba8aba0677be6911"
+    },
+    {
+      "path": "smartContract/scripts/deployDestination.ts",
+      "bytes": 1548,
+      "sha256": "b887a74c6b8aba31accb94514a1908018ae9c3bd7fbb94fa2c5bae7296605c97"
+    },
+    {
+      "path": "smartContract/scripts/deploySource.ts",
+      "bytes": 799,
+      "sha256": "74e2a198db89f037bbb885f517085e1e0790eedc8b10117259c1777b5e0b61f3"
+    },
+    {
+      "path": "smartContract/scripts/e2e-local.mjs",
+      "bytes": 3639,
+      "sha256": "52a3a10657f20af4a2638fe7911026ef75e8d596da54f8a7dd54f89410e43f51"
+    },
+    {
+      "path": "smartContract/scripts/export-abis.mjs",
+      "bytes": 361,
+      "sha256": "4127c8b214baa9a2bf787e36c260463e025b0cac4e72993c47c0a588eeca562d"
+    },
+    {
+      "path": "smartContract/test/SZToken.ts",
+      "bytes": 11970,
+      "sha256": "e81add0082ef7cb1e35286574f30212f551bb861111318326867bd4dac475725"
+    },
+    {
+      "path": "smartContract/test/Wrapper.ts",
+      "bytes": 1778,
+      "sha256": "5005c9ea2c2de55c5e4c6840e59d54723e87ea1ecd368865b0aedd30148725ae"
+    },
+    {
+      "path": "smartContract/tsconfig.json",
+      "bytes": 215,
+      "sha256": "99c8b5f07448d81a615de4ef3b4d36825b33d85d3b984856e38fef95fcdd5566"
+    },
+    {
+      "path": "vercel.json",
+      "bytes": 208,
+      "sha256": "f712e0bcf6d5eb6c138a956d987de4dbe6e8d543fa11d1d2dbbbb1fff49d9d03"
+    }
+  ]
+}

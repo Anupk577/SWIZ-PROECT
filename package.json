@@ -1,0 +1,1 @@
+{"name":"swiz-smart-dapp","version":"2.0.0","private":true,"engines":{"node":">=24"},"scripts":{"build":"npm --prefix frontEnd run build","test:contracts":"npm --prefix smartContract test","test:backend":"npm --prefix Backend test","start":"npm --prefix Backend start","dev":"npm --prefix frontEnd run dev"}}

@@ -1,0 +1,17 @@
+{
+  "packages": [],
+  "transactions": [],
+  "stats": {
+    "totalStakingPackages": 0,
+    "totalStakedAmountUSD": 0,
+    "buybackQueueLength": 0,
+    "nextPackageId": 1
+  },
+  "offChainSales": [],
+  "priceHistory": [
+    {
+      "timestamp": 1787910000000,
+      "priceUSD": 1.0
+    }
+  ]
+}

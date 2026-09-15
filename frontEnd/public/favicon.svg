@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Dark Glow -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#E3262E" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#0B0E14" stop-opacity="1"/>
+    </radialGradient>
+    
+    <!-- Red Liquid Glass Gradient -->
+    <linearGradient id="redGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF3B44"/>
+      <stop offset="50%" stop-color="#E3262E"/>
+      <stop offset="100%" stop-color="#990008"/>
+    </linearGradient>
+
+    <!-- Metallic Edge Highlight -->
+    <linearGradient id="edgeHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#E3262E" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#E3262E" stop-opacity="0.9"/>
+    </linearGradient>
+    
+    <!-- Inner Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Dark Rounded Container -->
+  <rect width="512" height="512" rx="128" fill="#0B0E14"/>
+  <circle cx="256" cy="256" r="230" fill="url(#bgGlow)"/>
+
+  <!-- Outer Hexagonal Shield -->
+  <path d="M256 48 L424 144 V336 L256 432 L88 336 V144 Z" 
+        fill="none" 
+        stroke="url(#edgeHighlight)" 
+        stroke-width="14" 
+        stroke-linejoin="round"
+        filter="url(#glow)"/>
+
+  <!-- Swiz 'S' Liquid Glass Logo Mark -->
+  <path d="M340 160 H210 C180 160 160 180 160 210 C160 240 180 255 210 265 L302 295 C332 305 352 320 352 350 C352 385 325 405 285 405 H172" 
+        fill="none" 
+        stroke="url(#redGlass)" 
+        stroke-width="44" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+
+  <!-- Diamond Accent -->
+  <polygon points="256,72 276,102 256,132 236,102" fill="#FFFFFF"/>
+</svg>

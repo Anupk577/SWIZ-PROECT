@@ -1,0 +1,30 @@
+# Backend local .gitignore
+node_modules/
+.env
+.env.*
+!.env.example
+
+# SQLite & Runtime State
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.sqlite-journal
+*.db-wal
+*.db-shm
+
+# Keys & Secrets
+*.pem
+*.key
+*.secret
+credentials.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS & IDE
+.DS_Store
+.idea/
+.vscode/
