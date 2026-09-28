@@ -136,10 +136,11 @@ describe("SOW automatic FIFO and partial buybacks", () => {
   });
   it("matches globally by earliest unlock timestamp", async () => {
     const { sz, usdt, alice, bob, mint } = await fixture();
-    const now = (await networkHelpers.time.latest()) - 2 * YEAR;
+    const spy = Number(await sz.SECONDS_PER_YEAR());
+    const now = (await networkHelpers.time.latest()) - 2 * spy;
     await sz.recordOfflineSale(sale(alice.address, 100n * U, now));
-    await sz.recordOfflineSale(sale(bob.address, 100n * U, now + 100 * 86400));
-    await networkHelpers.time.increase(500 * 86400);
+    await sz.recordOfflineSale(sale(bob.address, 100n * U, now + 100));
+    await networkHelpers.time.increase(150);
     await mint(bob, 10n * U);
     await sz
       .connect(bob)
@@ -307,5 +308,52 @@ describe("Accounting failure paths and conservation", () => {
         .purchase(10n * U, 11n * U, (await networkHelpers.time.latest()) + 60)
     ).revert(ethers);
     expect(await usdt.balanceOf(alice.address)).eq(10n * U);
+  });
+  describe("Secondary wallet registration and admin wallet replacement", () => {
+    it("allows user to set secondary wallet and rejects invalid addresses", async () => {
+      const { sz, alice, bob } = await fixture();
+      await expect(sz.connect(alice).setSecondaryWallet(alice.address)).revert(ethers);
+      await expect(sz.connect(alice).setSecondaryWallet(ethers.ZeroAddress)).revert(ethers);
+      await expect(sz.connect(alice).setSecondaryWallet(bob.address))
+        .to.emit(sz, "SecondaryWalletUpdated")
+        .withArgs(alice.address, bob.address);
+      expect(await sz.secondaryWallets(alice.address)).eq(bob.address);
+    });
+    it("restricts replaceWallet to admin and validates inputs", async () => {
+      const { sz, alice, bob } = await fixture();
+      await expect(sz.connect(alice).replaceWallet(alice.address, bob.address)).revert(ethers);
+      await expect(sz.replaceWallet(alice.address, alice.address)).revert(ethers);
+      await expect(sz.replaceWallet(ethers.ZeroAddress, bob.address)).revert(ethers);
+      await expect(sz.replaceWallet(alice.address, ethers.ZeroAddress)).revert(ethers);
+    });
+    it("migrates packages, active count, balances and buyback payouts to secondary wallet", async () => {
+      const { sz, usdt, alice, bob, mint } = await fixture();
+      const spy = Number(await sz.SECONDS_PER_YEAR());
+      const now = (await networkHelpers.time.latest()) - 2 * spy;
+      await sz.recordOfflineSale(sale(alice.address, 100n * U, now));
+      await sz.connect(alice).setSecondaryWallet(bob.address);
+      expect((await sz.getUserPackageIds(alice.address)).length).eq(1);
+      expect(await sz.activePackages(alice.address)).eq(1);
+
+      // Admin executes replacement
+      await expect(sz.replaceWallet(alice.address, bob.address))
+        .to.emit(sz, "WalletReplaced")
+        .withArgs(alice.address, bob.address, 1, 0);
+
+      expect((await sz.getUserPackageIds(alice.address)).length).eq(0);
+      expect(await sz.activePackages(alice.address)).eq(0);
+      const bobPackageIds = await sz.getUserPackageIds(bob.address);
+      expect(bobPackageIds.length).eq(1);
+      expect(bobPackageIds[0]).eq(1n);
+      expect(await sz.activePackages(bob.address)).eq(1);
+      expect((await sz.packages(1)).owner).eq(bob.address);
+
+      // Now bob buys, matching the unlocked package, payout must go to Bob (not Alice)
+      const [,,, buyer] = await ethers.getSigners();
+      await mint(buyer, 5n * U);
+      await sz.connect(buyer).purchase(5n * U, 5n * U, (await networkHelpers.time.latest()) + 60);
+      expect(await usdt.balanceOf(alice.address)).eq(0n);
+      expect(await usdt.balanceOf(bob.address)).eq(5n * U);
+    });
   });
 });

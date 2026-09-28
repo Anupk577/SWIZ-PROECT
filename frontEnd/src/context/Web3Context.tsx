@@ -30,7 +30,8 @@ import {
   TOKEN_ABI,
   ADAPTER_ABI,
 } from "../constants/contracts";
-import type { Source } from "../services/api";
+import type { Source, SecondaryWalletResponse } from "../services/api";
+import { api, apiPost } from "../services/api";
 export interface Tranche {
   unlockTimestamp: bigint;
   quantity: bigint;
@@ -86,6 +87,13 @@ interface State {
   isAdmin: boolean;
   loading: boolean;
   error: string;
+  secondaryWallet: string | null;
+  secondaryWalletStatus: string | null;
+  isSecondaryWalletModalOpen: boolean;
+  openSecondaryWalletModal: () => void;
+  closeSecondaryWalletModal: () => void;
+  saveSecondaryWallet: (secAddr: string, onChain?: boolean) => Promise<void>;
+  refreshSecondaryWallet: () => Promise<void>;
   refresh: () => Promise<void>;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -102,6 +110,36 @@ interface State {
   getSigner: (chain?: number) => Promise<any>;
   readPackages: (who: string) => Promise<Package[]>;
 }
+export function decodeWeb3Error(e: any): string {
+  if (!e) return "Transaction failed";
+  const errStr = String(e.message || e.reason || e.data || e);
+  const dataStr = String(e.data || e.info?.error?.data || e.error?.data || e.transaction?.data || "");
+
+  if (errStr.includes("0xb4fa3fb3") || dataStr.includes("0xb4fa3fb3") || errStr.includes("InvalidInput")) {
+    return "Execution reverted (InvalidInput): The payment reference ID has already been recorded on-chain, or the sale parameters (dates/quantity) violate contract rules.";
+  }
+  if (errStr.includes("0xfb8f41b2") || dataStr.includes("0xfb8f41b2") || errStr.includes("ERC20InsufficientAllowance")) {
+    return "Execution reverted (ERC20InsufficientAllowance): The contract does not have sufficient USDT allowance to execute this transfer. Please approve USDT.";
+  }
+  if (errStr.includes("0xe450d38c") || dataStr.includes("0xe450d38c") || errStr.includes("ERC20InsufficientBalance")) {
+    return "Execution reverted (ERC20InsufficientBalance): Insufficient USDT token balance in your wallet to fund buybacks.";
+  }
+  if (errStr.includes("0xee69e71e") || dataStr.includes("0xee69e71e") || errStr.includes("InventoryInsufficient")) {
+    return "Execution reverted (InventoryInsufficient): Treasury does not have enough SZ tokens available.";
+  }
+  if (errStr.includes("0xa34479e0") || dataStr.includes("0xa34479e0") || errStr.includes("Slippage")) {
+    return "Execution reverted (Slippage): Slippage limit exceeded.";
+  }
+  if (errStr.includes("AccessControl") || errStr.includes("0xf8a8fd6d") || errStr.includes("missing role")) {
+    return "Execution reverted (Unauthorized): Connected wallet is not authorized as Administrator on Polygon Amoy.";
+  }
+  if (errStr.includes("user rejected") || errStr.includes("ACTION_REJECTED")) {
+    return "Transaction was cancelled in your wallet.";
+  }
+  if (e instanceof Error && e.message) return e.message;
+  return errStr || "Transaction failed";
+}
+
 const Context = createContext<State | null>(null);
 const configured = Object.values(ADDRESSES).every(isAddress);
 const reader = new JsonRpcProvider(RPC, CHAIN_ID, {
@@ -122,7 +160,34 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     [isAdmin, setAdmin] = useState(false),
     [loading, setLoading] = useState(false),
     [error, setError] = useState("");
+  const [secondaryWallet, setSecondaryWalletState] = useState<string | null>(null);
+  const [secondaryWalletStatus, setSecondaryWalletStatus] = useState<string | null>(null);
+  const [isSecondaryWalletModalOpen, setIsSecondaryWalletModalOpen] = useState(false);
+  const promptedWallets = useRef<Set<string>>(new Set());
   const generation = useRef(0);
+
+  const fetchSecondaryWallet = useCallback(async (addr: string) => {
+    try {
+      const data = await api<SecondaryWalletResponse>(`/user/secondary-wallet/${addr}`);
+      if (data?.secondaryWallet) {
+        setSecondaryWalletState(data.secondaryWallet);
+        setSecondaryWalletStatus(data.status);
+        return data.secondaryWallet;
+      }
+    } catch {}
+    try {
+      const c = contract();
+      const onChain = await c.secondaryWallets(addr);
+      if (onChain && onChain !== "0x0000000000000000000000000000000000000000") {
+        setSecondaryWalletState(onChain);
+        setSecondaryWalletStatus("ACTIVE");
+        return onChain;
+      }
+    } catch {}
+    setSecondaryWalletState(null);
+    setSecondaryWalletStatus("UNSET");
+    return null;
+  }, []);
   const readPackages = useCallback(async (who: string) => {
     if (!isAddress(who)) throw Error("Invalid wallet");
     const c = contract();
@@ -251,6 +316,59 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       clearInterval(timer);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    if (address && isConnected) {
+      void fetchSecondaryWallet(address).then((sec) => {
+        const sessionDismissed = sessionStorage.getItem(
+          `sz_dismiss_secondary_${address.toLowerCase()}`
+        );
+        if (
+          !sec &&
+          !sessionDismissed &&
+          !promptedWallets.current.has(address.toLowerCase())
+        ) {
+          promptedWallets.current.add(address.toLowerCase());
+          setIsSecondaryWalletModalOpen(true);
+        }
+      });
+    } else {
+      setSecondaryWalletState(null);
+      setSecondaryWalletStatus(null);
+      setIsSecondaryWalletModalOpen(false);
+    }
+  }, [address, isConnected, fetchSecondaryWallet]);
+
+  const saveSecondaryWallet = async (secAddr: string, onChain = false) => {
+    if (!address) throw new Error("Wallet not connected");
+    if (!isAddress(secAddr)) throw new Error("Invalid secondary wallet address");
+    if (secAddr.toLowerCase() === address.toLowerCase()) {
+      throw new Error("Secondary wallet cannot be the same as primary wallet");
+    }
+
+    await apiPost("/user/secondary-wallet", {
+      primaryWallet: address,
+      secondaryWallet: secAddr,
+    });
+
+    if (onChain) {
+      const s = await signer();
+      const szContract = new Contract(ADDRESSES.sz, SZ_ABI, s);
+      let gasLimit: bigint;
+      try {
+        const estimated = await szContract.setSecondaryWallet.estimateGas(secAddr);
+        gasLimit = (estimated * 130n) / 100n;
+      } catch {
+        gasLimit = 200_000n;
+      }
+      const tx = await szContract.setSecondaryWallet(secAddr, { gasLimit });
+      await tx.wait();
+    }
+
+    setSecondaryWalletState(secAddr);
+    setSecondaryWalletStatus("ACTIVE");
+    await refresh();
+  };
   async function ensureCorrectNetwork(provider: any, targetChainId: number = CHAIN_ID) {
     const hexChainId = "0x" + targetChainId.toString(16);
     try {
@@ -268,6 +386,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       ) {
         try {
           const isBscTestnet = targetChainId === 97;
+          const isSepolia = targetChainId === 11155111;
           const chainParams = isBscTestnet
             ? {
                 chainId: hexChainId,
@@ -275,6 +394,14 @@ export function Web3Provider({ children }: { children: ReactNode }) {
                 nativeCurrency: { name: "tBNB", symbol: "tBNB", decimals: 18 },
                 rpcUrls: ["https://bsc-testnet-rpc.publicnode.com"],
                 blockExplorerUrls: ["https://testnet.bscscan.com"],
+              }
+            : isSepolia
+            ? {
+                chainId: hexChainId,
+                chainName: "Ethereum Sepolia Testnet",
+                nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
+                rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"],
+                blockExplorerUrls: ["https://sepolia.etherscan.io"],
               }
             : {
                 chainId: hexChainId,
@@ -325,6 +452,9 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
     return s;
   }
+
+
+
   async function transact(action: () => Promise<ContractTransactionResponse | TransactionResponse>) {
     setLoading(true);
     setError("");
@@ -336,8 +466,9 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       await refresh();
       return receipt;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Transaction failed");
-      throw e;
+      const decoded = decodeWeb3Error(e);
+      setError(decoded);
+      throw new Error(decoded);
     } finally {
       setLoading(false);
     }
@@ -409,15 +540,30 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         "revokeRole",
         "closeMigration",
         "importHistoricalSale",
+        "replaceWallet",
       ];
       if (!allowed.includes(method)) throw Error("Unsupported action");
-      if (method === "addTreasuryFunds")
+      if (method === "addTreasuryFunds") {
+        const szContract = new Contract(ADDRESSES.sz, SZ_ABI, s);
+        let usdtAddress = ADDRESSES.usdt;
+        try {
+          usdtAddress = await szContract.usdt();
+        } catch {}
+        const tokenContract = new Contract(usdtAddress, TOKEN_ABI, s);
+        const requiredAmount = args[0] as bigint;
+        const bal: bigint = await tokenContract.balanceOf(address);
+        if (bal < requiredAmount) {
+          throw new Error(
+            `Insufficient USDT balance: your wallet holds ${(Number(bal) / 1e6).toLocaleString()} USDT, but tried to fund ${(Number(requiredAmount) / 1e6).toLocaleString()} USDT.`
+          );
+        }
         await approve(
-          new Contract(ADDRESSES.wrapper, TOKEN_ABI, s),
+          tokenContract,
           address!,
           ADDRESSES.sz,
-          args[0] as bigint
+          requiredAmount
         );
+      }
       return new Contract(
         wrapper ? ADDRESSES.wrapper : ADDRESSES.sz,
         wrapper ? WRAPPER_ABI : SZ_ABI,
@@ -425,20 +571,34 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       )[method](...args);
     });
   const offline = (sale: Sale) =>
-    transact(async () =>
-      new Contract(ADDRESSES.sz, SZ_ABI, await signer()).recordOfflineSale(sale)
-    );
+    transact(async () => {
+      const s = await signer();
+      const contract = new Contract(ADDRESSES.sz, SZ_ABI, s);
+      const tx = await contract.recordOfflineSale(sale);
+      const receipt = await tx.wait();
+      return receipt || tx;
+    });
   const deposit = (source: Source, value: bigint) =>
     transact(async () => {
       const s = await signer(source.chainId),
         a = new Contract(source.adapter, ADAPTER_ABI, s);
-      const [token, scale, destination, wrapper, treasury] = await Promise.all([
-        a.token(),
-        a.scale(),
-        a.destinationChainId(),
-        a.destinationWrapper(),
-        a.treasury(),
-      ]);
+      
+      let token: string, scale: bigint, destination: bigint, wrapper: string, treasury: string;
+      try {
+        [token, scale, destination, wrapper, treasury] = await Promise.all([
+          a.token(),
+          a.scale(),
+          a.destinationChainId(),
+          a.destinationWrapper(),
+          a.treasury(),
+        ]);
+      } catch (err: any) {
+        console.error("Failed to read deposit adapter state:", err);
+        throw Error(
+          `Unable to interact with deposit adapter (${source.adapter}) on ${source.name || `Chain ID ${source.chainId}`}. Please make sure you select an active testnet (Ethereum Sepolia, BSC Testnet, or Polygon Amoy).`
+        );
+      }
+
       const validWrappers = [
         ADDRESSES.wrapper.toLowerCase(),
         "0x2c74e4fbc2da0dae929c7f717fc921bd81015c68",
@@ -489,7 +649,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const currentChainId = Number(network.chainId);
 
       const targetUsdt =
-        currentChainId === 97
+        currentChainId === 97 || currentChainId === 11155111
           ? "0x890FadD44588e67e5091147392413F8c67736Ec9"
           : ADDRESSES.usdt;
 
@@ -533,6 +693,23 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         isAdmin,
         loading,
         error,
+        secondaryWallet,
+        secondaryWalletStatus,
+        isSecondaryWalletModalOpen,
+        openSecondaryWalletModal: () => setIsSecondaryWalletModalOpen(true),
+        closeSecondaryWalletModal: () => {
+          if (address) {
+            sessionStorage.setItem(
+              `sz_dismiss_secondary_${address.toLowerCase()}`,
+              "true"
+            );
+          }
+          setIsSecondaryWalletModalOpen(false);
+        },
+        saveSecondaryWallet,
+        refreshSecondaryWallet: async () => {
+          if (address) await fetchSecondaryWallet(address);
+        },
         refresh,
         connect: async () => {
           try {

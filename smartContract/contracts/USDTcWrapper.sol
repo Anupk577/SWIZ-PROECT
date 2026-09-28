@@ -21,11 +21,13 @@ contract USDTcWrapper is ERC20, AccessControlEnumerable, Pausable {
         bytes32 sourceTxHash
     );
     constructor(
-        address admin
+        address admin,
+        address relayer
     ) ERC20("Wrapped USDT", "USDT.c") {
-        require(admin != address(0), "Invalid admin");
+        require(admin != address(0) && relayer != address(0) && admin != relayer, "Invalid admin/relayer");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
+        _grantRole(BRIDGE_RELAYER_ROLE, relayer);
     }
     function decimals() public pure override returns (uint8) {
         return 6;

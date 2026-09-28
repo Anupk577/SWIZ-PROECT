@@ -1,0 +1,9 @@
+{
+  "sepoliaChainId": 11155111,
+  "sepoliaUsdtAddress": "0x890FadD44588e67e5091147392413F8c67736Ec9",
+  "sepoliaAdapterAddress": "0x279bF3c4bF4E1eE5A5Afed5d123d0421424e284F",
+  "amoyWrapperAddress": "0xAfECBA18585f6C9eb120fD89a56B53243856a4fB",
+  "treasuryAddress": "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
+  "deployerAddress": "0x9B5AfF6e8e7d6079bf35E77e35492f8e49e39c8E",
+  "timestamp": "2026-09-21T06:24:36.934Z"
+}

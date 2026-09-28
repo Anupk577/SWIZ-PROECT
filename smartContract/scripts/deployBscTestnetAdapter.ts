@@ -12,7 +12,7 @@ const abis = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../frontEnd/
 dotenv.config();
 
 const BSC_TESTNET_RPC = "https://bsc-testnet-rpc.publicnode.com";
-const AMOY_RPC = process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy-bor-rpc.publicnode.com";
+const AMOY_RPC = process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy.g.alchemy.com/v2/SkzrI3058h3g92BAFz9fU";
 
 const PRIVATE_KEY = process.env.POLYGON_AMOY_PRIVATE_KEY || process.env.PRIVATE_KEY;
 if (!PRIVATE_KEY) throw new Error("PRIVATE_KEY is missing in .env");

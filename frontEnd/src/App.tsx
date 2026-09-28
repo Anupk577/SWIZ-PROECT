@@ -8,13 +8,18 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { BuyTokenPage } from "./pages/BuyTokenPage";
 import { DepositPage } from "./pages/DepositPage";
 import { AdminPage } from "./pages/AdminPage";
+import { SecondaryWalletModal } from "./components/SecondaryWalletModal";
 import { AlertCircle, RefreshCw } from "lucide-react";
 function Layout() {
-  const { error, refresh } = useWeb3();
+  const { error, refresh, isSecondaryWalletModalOpen, closeSecondaryWalletModal } = useWeb3();
   return (
     <div className="min-h-screen flex flex-col bg-[#0B0E14] text-white">
       <ScrollToTop />
       <Navbar />
+      <SecondaryWalletModal
+        isOpen={isSecondaryWalletModalOpen}
+        onClose={closeSecondaryWalletModal}
+      />
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 min-w-0">
         {error && (
           <div

@@ -1,14 +1,10 @@
 import { ethers } from "ethers";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 async function main() {
-  const amoyRpc = process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy-bor-rpc.publicnode.com";
+  const amoyRpc = "https://polygon-amoy.g.alchemy.com/v2/SkzrI3058h3g92BAFz9fU";
   const provider = new ethers.JsonRpcProvider(amoyRpc);
 
-  const newRelayerKey = process.env.RELAYER_PRIVATE_KEY || process.env.PRIVATE_KEY;
-  if (!newRelayerKey) throw new Error("Missing RELAYER_PRIVATE_KEY or PRIVATE_KEY in environment");
+  const newRelayerKey = "0xa594fa84d1f8333a50e5796ad77b2f15aeaed79f4b1913ca42d54a8628d9472d";
   const relayerWallet = new ethers.Wallet(newRelayerKey, provider);
 
   console.log(`Relayer Wallet: ${relayerWallet.address}`);

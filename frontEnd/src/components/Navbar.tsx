@@ -14,7 +14,13 @@ import {
 } from "lucide-react";
 
 export const Navbar: React.FC = () => {
-  const { walletState, connectWallet, disconnectWallet } = useWeb3();
+  const {
+    walletState,
+    connectWallet,
+    disconnectWallet,
+    secondaryWallet,
+    openSecondaryWalletModal,
+  } = useWeb3();
 
   const shortenAddress = (addr: string | null) => {
     if (!addr) return "";
@@ -77,6 +83,30 @@ export const Navbar: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
 
+          {/* Secondary Wallet Quick-Status Pill */}
+          {walletState.isConnected && (
+            <button
+              onClick={openSecondaryWalletModal}
+              title={
+                secondaryWallet
+                  ? `Secondary Backup Wallet: ${secondaryWallet} (Click to view/update)`
+                  : "Add Secondary Backup Wallet to protect your assets"
+              }
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                secondaryWallet
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                  : "bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 animate-pulse"
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>
+                {secondaryWallet
+                  ? `Backup: ${secondaryWallet.slice(0, 4)}...${secondaryWallet.slice(-4)}`
+                  : "Add Secondary Wallet"}
+              </span>
+            </button>
+          )}
+
           {/* Wallet Profile Connection Button */}
           {walletState.isConnected ? (
             <div className="flex items-center gap-2 bg-[#111520] border border-white/10 p-1.5 rounded-xl">
@@ -137,6 +167,18 @@ export const Navbar: React.FC = () => {
         >
           Bridge
         </NavLink>
+        {walletState.isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
+              }`
+            }
+          >
+            Admin
+          </NavLink>
+        )}
         {walletState.isConnected && (
           <NavLink
             to="/dashboard"

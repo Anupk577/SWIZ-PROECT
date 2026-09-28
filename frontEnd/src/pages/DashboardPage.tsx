@@ -1,5 +1,6 @@
 import { CHAIN_ID, EXPLORER, ADDRESSES } from "../constants/contracts";
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { StakingPackagesSection } from "../components/StakingPackagesSection";
 import { EcosystemRewardsSection } from "../components/EcosystemRewardsSection";
 import { TransactionHistorySection } from "../components/TransactionHistorySection";
@@ -12,6 +13,7 @@ import {
   Wallet,
   ArrowRight,
   ShieldCheck,
+  Shield,
   Activity,
   Award,
   DollarSign,
@@ -19,10 +21,20 @@ import {
   LayoutDashboard,
   History,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 
 export const DashboardPage: React.FC = () => {
-  const { walletState, protocolStats, userPackages, ready, stats } = useWeb3();
+  const {
+    walletState,
+    protocolStats,
+    userPackages,
+    ready,
+    stats,
+    secondaryWallet,
+    secondaryWalletStatus,
+    openSecondaryWalletModal,
+  } = useWeb3();
   const [isWalletModalOpen, setIsWalletModalOpen] = useState<boolean>(false);
   const [activeSidebarTab, setActiveSidebarTab] = useState<
     "overview" | "packages" | "rewards" | "history"
@@ -108,9 +120,20 @@ export const DashboardPage: React.FC = () => {
               <User className="w-8 h-8" />
             </div>
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                Connected User Portfolio
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  Connected User Portfolio
+                </div>
+                {walletState.isAdmin && (
+                  <Link
+                    to="/admin"
+                    className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-[#E3262E]/20 hover:bg-[#E3262E]/30 text-red-300 border border-[#E3262E]/40 rounded-full text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-[#E3262E]" />
+                    <span>Go to Dedicated Admin Portal ↗</span>
+                  </Link>
+                )}
               </div>
               <h1 className="text-lg sm:text-3xl font-extrabold text-white font-mono mt-1 tracking-tight break-all">
                 {walletState.address
@@ -157,6 +180,78 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* SECONDARY BACKUP WALLET NOTIFICATION / MANAGEMENT CARD */}
+      <div
+        className={`rounded-3xl p-5 sm:p-6 transition-all border ${
+          secondaryWallet
+            ? "bg-gradient-to-r from-emerald-950/20 via-[#111520] to-[#0B0E14] border-emerald-500/30"
+            : "bg-gradient-to-r from-red-950/25 via-[#131926] to-[#0B0E14] border-red-500/30 shadow-lg shadow-red-500/10"
+        }`}
+      >
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
+                secondaryWallet
+                  ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+                  : "bg-red-500/20 border-red-500/40 text-[#E3262E]"
+              }`}
+            >
+              {secondaryWallet ? (
+                <ShieldCheck className="w-6 h-6" />
+              ) : (
+                <AlertTriangle className="w-6 h-6" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-extrabold text-white">
+                  {secondaryWallet
+                    ? "Secondary Backup Wallet Active"
+                    : "Action Recommended: Set Secondary Backup Wallet"}
+                </h3>
+                <span
+                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    secondaryWallet
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                      : "bg-red-500/15 border-red-500/30 text-red-400 animate-pulse"
+                  }`}
+                >
+                  {secondaryWallet
+                    ? (secondaryWalletStatus ? `PROTECTED (${secondaryWalletStatus})` : "PROTECTED")
+                    : "UNPROTECTED"}
+                </span>
+              </div>
+              <p className="text-xs text-gray-300 max-w-2xl leading-relaxed">
+                {secondaryWallet ? (
+                  <>
+                    Your backup recovery address is{" "}
+                    <span className="font-mono text-emerald-300 font-bold break-all">
+                      {secondaryWallet}
+                    </span>
+                    . In case of primary wallet loss, protocol administration can migrate your packages and buybacks.
+                  </>
+                ) : (
+                  "Decentralized wallets can be lost due to compromised private keys or misplaced recovery phrases. Add a verified secondary backup wallet so protocol administrators can safely recover your packages and buyback returns."
+                )}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={openSecondaryWalletModal}
+            className={`px-5 py-3 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 shrink-0 ${
+              secondaryWallet
+                ? "bg-white/5 hover:bg-white/10 text-white border border-white/10"
+                : "bg-[#E3262E] hover:bg-red-700 text-white shadow-md shadow-[#E3262E]/25"
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>{secondaryWallet ? "Update Backup Wallet" : "Add Secondary Wallet"}</span>
+          </button>
         </div>
       </div>
 

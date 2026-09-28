@@ -72,6 +72,8 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     mapping(bytes32 => bool) public recordedReferences;
     Position[] private heap;
 
+    mapping(address => address) public secondaryWallets;
+
     event PackageCreated(
         uint256 indexed packageId,
         address indexed owner,
@@ -110,6 +112,16 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         uint256 indexed packageId,
         bytes32 indexed referenceId,
         bool migration
+    );
+    event SecondaryWalletUpdated(
+        address indexed primaryWallet,
+        address indexed secondaryWallet
+    );
+    event WalletReplaced(
+        address indexed oldWallet,
+        address indexed newWallet,
+        uint256 packagesMigrated,
+        uint256 szBalanceTransferred
     );
     error InvalidInput();
     error InventoryInsufficient();
@@ -166,6 +178,50 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     function closeMigration() external onlyRole(ADMIN_ROLE) {
         migrationOpen = false;
         emit MigrationClosed();
+    }
+    function setSecondaryWallet(address secondary) external whenNotPaused {
+        if (secondary == address(0) || secondary == msg.sender) revert InvalidInput();
+        secondaryWallets[msg.sender] = secondary;
+        emit SecondaryWalletUpdated(msg.sender, secondary);
+    }
+    function replaceWallet(
+        address oldWallet,
+        address newWallet
+    ) external onlyRole(ADMIN_ROLE) whenNotPaused nonReentrant {
+        if (
+            oldWallet == address(0) ||
+            newWallet == address(0) ||
+            oldWallet == newWallet
+        ) revert InvalidInput();
+
+        if (
+            maxActivePackages != 0 &&
+            (activePackages[newWallet] + activePackages[oldWallet]) > maxActivePackages
+        ) revert InvalidInput();
+
+        uint256[] storage oldPkgIds = ownerPackages[oldWallet];
+        uint256 count = oldPkgIds.length;
+        for (uint256 i = 0; i < count; ++i) {
+            uint256 id = oldPkgIds[i];
+            packages[id].owner = newWallet;
+            ownerPackages[newWallet].push(id);
+        }
+        delete ownerPackages[oldWallet];
+
+        activePackages[newWallet] += activePackages[oldWallet];
+        activePackages[oldWallet] = 0;
+
+        secondaryWallets[newWallet] = secondaryWallets[oldWallet] == newWallet
+            ? address(0)
+            : secondaryWallets[oldWallet];
+        delete secondaryWallets[oldWallet];
+
+        uint256 bal = balanceOf(oldWallet);
+        if (bal > 0) {
+            _transfer(oldWallet, newWallet, bal);
+        }
+
+        emit WalletReplaced(oldWallet, newWallet, count, bal);
     }
 
     // O(log steps) fixed-point exponentiation. Limit ensures checked arithmetic capacity.

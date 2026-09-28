@@ -11,8 +11,7 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   const rpc = "https://polygon-amoy-bor-rpc.publicnode.com";
-  const pk = process.env.ADMIN_PRIVATE_KEY || process.env.POLYGON_AMOY_PRIVATE_KEY || process.env.PRIVATE_KEY;
-  if (!pk) throw new Error("Missing PRIVATE_KEY, ADMIN_PRIVATE_KEY, or POLYGON_AMOY_PRIVATE_KEY in environment");
+  const pk = "a2b51f5b4ff4991f3dc2b671b3948920a6d006a79322913a5264f18d3c0fcbcf";
   const adminAddr = "0x9B5AfF6e8e7d6079bf35E77e35492f8e49e39c8E";
 
   const provider = new ethers.JsonRpcProvider(rpc);

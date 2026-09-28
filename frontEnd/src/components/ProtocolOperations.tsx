@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { formatUnits, id as hashId, JsonRpcProvider, Interface, zeroPadValue, Contract, type TransactionReceipt } from "ethers";
+import { useEffect, useState, useRef, type FormEvent, type ReactNode } from "react";
+import { formatUnits, id as hashId, JsonRpcProvider, Interface, zeroPadValue, Contract, isAddress, type TransactionReceipt } from "ethers";
 import {
   useWeb3,
   units,
+  decodeWeb3Error,
   type Package,
   type Sale,
 } from "../context/Web3Context";
@@ -12,7 +13,8 @@ import {
   type Deposit,
   type PublicConfig,
 } from "../services/api";
-import { ADDRESSES, CHAIN_ID, EXPLORER, ADAPTER_ABI, WRAPPER_ABI } from "../constants/contracts";
+import { ADDRESSES, CHAIN_ID, EXPLORER, ADAPTER_ABI, WRAPPER_ABI, SZ_ABI } from "../constants/contracts";
+import { AdminWalletReplacementSection } from "./AdminWalletReplacementSection";
 const amount = (n: bigint | string | undefined) =>
   n === undefined ? "—" : formatUnits(n, 6);
 const date = (t: bigint | number) =>
@@ -74,6 +76,74 @@ function Field({
     </div>
   );
 }
+function DateTimePickerField({
+  label,
+  name,
+  defaultValue,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [val, setVal] = useState<string>(defaultValue || "");
+
+  const handleOpenPicker = () => {
+    if (inputRef.current) {
+      if ("showPicker" in inputRef.current && typeof (inputRef.current as any).showPicker === "function") {
+        (inputRef.current as any).showPicker();
+      } else {
+        inputRef.current.focus();
+      }
+    }
+  };
+
+  const handleSetNow = () => {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+    setVal(localISOTime);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+          {label}
+        </label>
+        <button
+          type="button"
+          onClick={handleSetNow}
+          className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
+        >
+          <span>⚡ Now</span>
+        </button>
+      </div>
+
+      <div className="relative flex items-center">
+        <input
+          ref={inputRef}
+          name={name}
+          type="datetime-local"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          required
+          style={{ colorScheme: "dark" }}
+          className="w-full bg-[#0B0E14] border border-white/15 rounded-xl pl-4 pr-11 py-3 text-white text-sm focus:border-[#E3262E] focus:outline-none transition-colors cursor-pointer"
+        />
+        <button
+          type="button"
+          onClick={handleOpenPicker}
+          className="absolute right-3 p-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center text-sm"
+          title="Open Calendar & Clock Selector"
+        >
+          📅
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ActionForm({
   title,
   id,
@@ -403,8 +473,118 @@ function mergeDeposits(
   return Array.from(map.values());
 }
 
+export interface OfflineSaleRecord {
+  id: string;
+  txHash: string;
+  buyer: string;
+  amount: string;
+  valueUsd: string;
+  priceUsd: string;
+  purchasedAt: string;
+  startedAt: string;
+  reference: string;
+  timestamp: number;
+}
+
+export function getLocalOfflineSales(): OfflineSaleRecord[] {
+  try {
+    const raw = localStorage.getItem("sz_offline_sales_history");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalOfflineSale(rec: OfflineSaleRecord) {
+  try {
+    const existing = getLocalOfflineSales();
+    const filtered = existing.filter(
+      (r) =>
+        r.txHash?.toLowerCase() !== rec.txHash?.toLowerCase() &&
+        r.reference?.toLowerCase() !== rec.reference?.toLowerCase()
+    );
+    const updated = [rec, ...filtered];
+    localStorage.setItem("sz_offline_sales_history", JSON.stringify(updated.slice(0, 100)));
+  } catch {}
+}
+
+function mergeOfflineSales(...lists: OfflineSaleRecord[][]): OfflineSaleRecord[] {
+  const map = new Map<string, OfflineSaleRecord>();
+  for (const list of lists) {
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        if (item && (item.txHash || item.id || item.reference)) {
+          const key = (item.txHash || item.reference || item.id).toLowerCase();
+          if (!map.has(key) || (item.timestamp && item.timestamp > (map.get(key)?.timestamp || 0))) {
+            map.set(key, item);
+          }
+        }
+      }
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+}
+
+async function fetchOnChainOfflineSales(): Promise<OfflineSaleRecord[]> {
+  try {
+    const provider = new JsonRpcProvider("https://polygon-amoy-bor-rpc.publicnode.com", CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
+    const szContract = new Contract(
+      ADDRESSES.sz,
+      [
+        "function nextPackageId() view returns (uint256)",
+        "function packages(uint256) view returns (tuple(uint256 id, address owner, uint256 amount, uint256 originalPrice, uint256 startTimestamp, bool isOffline, uint256 etReceived, uint256 purchaseValue, uint256 purchaseTimestamp, uint256 boughtBack, uint256 usdtReceived, bytes32 paymentReference))",
+      ],
+      provider
+    );
+
+    const nextId: bigint = await szContract.nextPackageId().catch(() => 1n);
+    const total = Number(nextId) - 1;
+    if (total <= 0) return [];
+
+    const ids = Array.from({ length: total }, (_, i) => BigInt(i + 1));
+    const allPackages = await Promise.all(ids.map((id) => szContract.packages(id).catch(() => null)));
+
+    const localList = getLocalOfflineSales();
+
+    const records: OfflineSaleRecord[] = [];
+    for (const pkg of allPackages) {
+      if (pkg && pkg.isOffline && pkg.owner && pkg.owner !== "0x0000000000000000000000000000000000000000") {
+        const pkgIdStr = pkg.id.toString();
+        const refBytes32 = pkg.paymentReference ? pkg.paymentReference.toString() : "";
+        const refDisplay = (refBytes32 && refBytes32 !== "0x0000000000000000000000000000000000000000000000000000000000000000")
+          ? `${refBytes32.slice(0, 10)}...${refBytes32.slice(-6)}`
+          : `Package #${pkgIdStr}`;
+
+        const localMatch = localList.find(
+          (l) =>
+            l.amount === pkg.amount.toString() &&
+            l.buyer.toLowerCase() === pkg.owner.toLowerCase()
+        );
+
+        records.push({
+          id: pkgIdStr,
+          txHash: localMatch?.txHash || "",
+          buyer: pkg.owner,
+          amount: pkg.amount.toString(),
+          valueUsd: pkg.purchaseValue ? pkg.purchaseValue.toString() : pkg.amount.toString(),
+          priceUsd: pkg.originalPrice ? pkg.originalPrice.toString() : "1000000",
+          purchasedAt: new Date(Number(pkg.purchaseTimestamp) * 1000).toLocaleString(),
+          startedAt: new Date(Number(pkg.startTimestamp) * 1000).toLocaleString(),
+          reference: localMatch?.reference || refDisplay,
+          timestamp: Number(pkg.purchaseTimestamp) * 1000,
+        });
+      }
+    }
+
+    return records.reverse();
+  } catch (e) {
+    console.warn("Unable to fetch on-chain offline sales:", e);
+    return [];
+  }
+}
+
 export function BridgePanel({ all = false }: { all?: boolean }) {
-  const { address, deposit, getSigner, refresh } = useWeb3();
+  const { address, deposit, getSigner, refresh, mintTestnetUsdt } = useWeb3();
   const [config, setConfig] = useState<PublicConfig | null>(null),
     [deposits, setDeposits] = useState<Deposit[]>(() => getLocalDeposits(all ? undefined : address)),
     [error, setError] = useState(""),
@@ -422,7 +602,7 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
       // Fetch deposit proof nonce directly and prompt for on-chain transaction
       setClaimMsg("Fetching deposit proof nonce from source chain...");
 
-      const adapter = d.source === 97 
+      const adapter = (d.source === 97 || d.source === 11155111) 
         ? "0x279bF3c4bF4E1eE5A5Afed5d123d0421424e284F" 
         : ADDRESSES.adapter;
 
@@ -430,6 +610,8 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
       try {
         const srcRpc = d.source === 97 
           ? "https://bsc-testnet-rpc.publicnode.com" 
+          : d.source === 11155111
+          ? "https://ethereum-sepolia-rpc.publicnode.com"
           : "https://polygon-amoy-bor-rpc.publicnode.com";
         const srcProvider = new JsonRpcProvider(srcRpc, d.source, { staticNetwork: true, batchMaxCount: 1 });
         const srcReceipt = await srcProvider.getTransactionReceipt(d.sourceTx);
@@ -494,20 +676,12 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
         wrapper: ADDRESSES.wrapper,
         sources: [
           {
-            chainId: 80002,
-            name: "Polygon Amoy Testnet (80002)",
-            adapter: ADDRESSES.adapter,
-            token: ADDRESSES.usdt,
+            chainId: 11155111,
+            name: "Ethereum Sepolia Testnet (11155111)",
+            adapter: "0x279bF3c4bF4E1eE5A5Afed5d123d0421424e284F",
+            token: "0x890FadD44588e67e5091147392413F8c67736Ec9",
             treasury: "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
-            explorer: EXPLORER,
-          },
-          {
-            chainId: 56,
-            name: "BNB Smart Chain (BSC) Mainnet (56)",
-            adapter: ADDRESSES.adapter,
-            token: "0x55d398326f99059fF775485246999027B3197955",
-            treasury: "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
-            explorer: "https://bscscan.com",
+            explorer: "https://sepolia.etherscan.io",
           },
           {
             chainId: 97,
@@ -518,20 +692,12 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
             explorer: "https://testnet.bscscan.com",
           },
           {
-            chainId: 1,
-            name: "Ethereum Mainnet (1)",
+            chainId: 80002,
+            name: "Polygon Amoy Testnet (80002)",
             adapter: ADDRESSES.adapter,
-            token: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            token: ADDRESSES.usdt,
             treasury: "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
-            explorer: "https://etherscan.io",
-          },
-          {
-            chainId: 11155111,
-            name: "Ethereum Sepolia Testnet (11155111)",
-            adapter: ADDRESSES.adapter,
-            token: "0x7169D388206751599E10E59489A1208D594119d8",
-            treasury: "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
-            explorer: "https://sepolia.etherscan.io",
+            explorer: EXPLORER,
           },
         ],
       };
@@ -547,7 +713,31 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
           fetchOnChainDeposits(address ? address : undefined),
         ]);
 
-        const activeConfig = (c && Array.isArray(c.sources) && c.sources.length > 0) ? c : amoyDefaultConfig;
+        let rawConfig = (c && Array.isArray(c.sources) && c.sources.length > 0) ? c : amoyDefaultConfig;
+        
+        // Sanitize sources to ensure active deployed adapter addresses are always enforced
+        const sanitizedSources = rawConfig.sources.map((src) => {
+          if (src.chainId === 11155111 || src.chainId === 97) {
+            return {
+              ...src,
+              adapter: "0x279bF3c4bF4E1eE5A5Afed5d123d0421424e284F",
+              token: "0x890FadD44588e67e5091147392413F8c67736Ec9",
+            };
+          }
+          if (src.chainId === 80002) {
+            return {
+              ...src,
+              adapter: ADDRESSES.adapter,
+              token: ADDRESSES.usdt,
+            };
+          }
+          return src;
+        });
+
+        const activeConfig: PublicConfig = {
+          ...rawConfig,
+          sources: sanitizedSources,
+        };
         const remoteDeposits = d && Array.isArray(d.deposits) ? d.deposits : [];
         const currentLocal = getLocalDeposits(all ? undefined : address);
         const merged = mergeDeposits(currentLocal, remoteDeposits, onChainRes.onChainDeposits, onChainRes.mintedBySourceTx);
@@ -638,13 +828,48 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
           </div>
         </div>
 
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs space-y-2">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs space-y-3">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-emerald-300 flex items-center gap-1.5">
-              Need Testnet USDT or Native Gas Tokens?
+            <span className="font-bold text-emerald-300 flex items-center gap-1.5 text-xs">
+              💧 Testnet Collateral & Gas Token Faucets
             </span>
+            <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">Sepolia (11155111) · BSC (97) · Amoy (80002)</span>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                setClaimMsg("Requesting wallet to mint 10,000 Sepolia USDT...");
+                try {
+                  await mintTestnetUsdt(11155111);
+                  setClaimMsg("✓ Minted 10,000 Sepolia USDT successfully!");
+                } catch (e: any) {
+                  setClaimMsg(`Notice: ${e?.message || "Minting failed"}`);
+                }
+              }}
+              className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] font-extrabold transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              ⚡ Mint 10k Sepolia USDT
+            </button>
+
+            <a
+              href="https://cloud.google.com/application/web3/faucet/ethereum/sepolia"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1"
+            >
+              Google Sepolia ETH Faucet ↗
+            </a>
+
+            <a
+              href="https://sepoliafaucet.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1"
+            >
+              Alchemy Sepolia ETH Faucet ↗
+            </a>
+
             <a
               href="https://testnet.bnbchain.org/faucet-smart"
               target="_blank"
@@ -653,6 +878,7 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
             >
               BSC tBNB Faucet ↗
             </a>
+
             <a
               href="https://faucet.polygon.technology/"
               target="_blank"
@@ -801,13 +1027,235 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
 }
 export type AdminTab =
   | "offchain"
+  | "offchain-history"
+  | "replace-wallet"
   | "liquidity"
   | "controls"
   | "records"
   | "bridge"
   | "migration";
+
+function OfflineSalesFormSection({ parseSale }: { parseSale: (f: FormData) => Sale }) {
+  const { offline, refresh } = useWeb3();
+  const [statusMsg, setStatusMsg] = useState<string>("");
+
+  return (
+    <ActionForm
+      title="Record offline sale"
+      submit={async (f) => {
+        setStatusMsg("Validating offline sale details & payment reference uniqueness...");
+        try {
+          const refRaw = String(f.get("reference") || "").trim();
+          if (!refRaw) {
+            throw Error("Offline payment reference is required.");
+          }
+
+          const buyerAddr = String(f.get("buyer") || "").trim();
+          if (!isAddress(buyerAddr)) {
+            throw Error(`Invalid buyer wallet address "${buyerAddr}". Must be a valid 0x EVM address.`);
+          }
+
+          const refIdHash = hashId(refRaw);
+          const provider = new JsonRpcProvider("https://polygon-amoy-bor-rpc.publicnode.com", CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
+          const szContract = new Contract(ADDRESSES.sz, SZ_ABI, provider);
+          
+          const alreadyRecorded = await szContract.recordedReferences(refIdHash).catch(() => false);
+          if (alreadyRecorded) {
+            throw Error(`Payment reference "${refRaw}" has ALREADY been recorded on-chain. Please use a unique reference ID.`);
+          }
+
+          const saleObj = parseSale(f);
+
+          setStatusMsg("Submitting offline sale to Polygon Amoy blockchain via admin wallet...");
+          const receipt = await offline(saleObj);
+          const txHash = (receipt as any)?.hash || (receipt as any)?.transactionHash || String(receipt);
+
+          const rec: OfflineSaleRecord = {
+            id: txHash,
+            txHash,
+            buyer: saleObj.buyer,
+            amount: saleObj.amount.toString(),
+            valueUsd: saleObj.value.toString(),
+            priceUsd: saleObj.price.toString(),
+            purchasedAt: String(f.get("purchased")),
+            startedAt: String(f.get("started")),
+            reference: refRaw,
+            timestamp: Date.now(),
+          };
+          saveLocalOfflineSale(rec);
+          await refresh();
+          setStatusMsg("✓ Offline sale recorded on-chain successfully! You can view it in the Offline Sales History tab.");
+          setTimeout(() => setStatusMsg(""), 6000);
+          return receipt;
+        } catch (err: any) {
+          const decoded = decodeWeb3Error(err);
+          setStatusMsg(`Error: ${decoded}`);
+          throw new Error(decoded);
+        }
+      }}
+    >
+      <Field name="buyer" label="Buyer wallet" />
+      <div className="columns">
+        <Field name="quantity" label="SZ quantity" />
+        <Field name="value" label="Original USD value" />
+        <Field name="price" label="Original SZ unit price" />
+      </div>
+      <div className="columns">
+        <DateTimePickerField
+          name="purchased"
+          label="Original purchase date & time"
+        />
+        <DateTimePickerField
+          name="started"
+          label="Staking start date & time"
+        />
+      </div>
+      <Field name="reference" label="Unique offline payment reference" />
+      {statusMsg && (
+        <p className={`text-xs font-semibold mt-2 ${statusMsg.startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+          {statusMsg}
+        </p>
+      )}
+    </ActionForm>
+  );
+}
+
+function OfflineSalesHistorySection() {
+  const [records, setRecords] = useState<OfflineSaleRecord[]>(getLocalOfflineSales());
+  const [filter, setFilter] = useState("");
+  const [copiedTx, setCopiedTx] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      const onChainRecords = await fetchOnChainOfflineSales();
+      const local = getLocalOfflineSales();
+      const merged = mergeOfflineSales(local, onChainRecords);
+      if (alive) setRecords(merged);
+    }
+    void load();
+    const timer = setInterval(() => void load(), 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const handleCopy = (txt: string) => {
+    navigator.clipboard.writeText(txt);
+    setCopiedTx(txt);
+    setTimeout(() => setCopiedTx(null), 2000);
+  };
+
+  const filteredRecords = records.filter(
+    (r) =>
+      !filter ||
+      r.buyer?.toLowerCase().includes(filter.toLowerCase()) ||
+      r.reference?.toLowerCase().includes(filter.toLowerCase()) ||
+      r.txHash?.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const totalVolume = records.reduce((acc, r) => acc + BigInt(r.valueUsd || 0), 0n);
+
+  return (
+    <Panel title="Recorded Offline Sales History">
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-800">
+          <div className="flex items-center gap-4">
+            <div className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <span className="text-[11px] text-gray-400 block">Total Offline Sales</span>
+              <span className="text-sm font-extrabold text-amber-400">{records.length} Recorded</span>
+            </div>
+            <div className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <span className="text-[11px] text-gray-400 block">Total USD Volume</span>
+              <span className="text-sm font-extrabold text-emerald-400">${amount(totalVolume)}</span>
+            </div>
+          </div>
+
+          <div className="relative max-w-xs w-full">
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Search by buyer address or reference..."
+              className="w-full px-3 py-1.5 bg-[#0D111A] border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#E3262E]"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-gray-300">
+            <thead className="bg-[#0D111A] text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+              <tr>
+                <th className="px-4 py-3 rounded-l-xl">Reference / ID</th>
+                <th className="px-4 py-3">Buyer Wallet</th>
+                <th className="px-4 py-3">SZ Quantity</th>
+                <th className="px-4 py-3">USD Value</th>
+                <th className="px-4 py-3">Purchase Date</th>
+                <th className="px-4 py-3 rounded-r-xl text-right">On-Chain Proof</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800/50">
+              {filteredRecords.map((r, idx) => (
+                <tr key={r.txHash || r.reference || idx} className="hover:bg-white/5 transition-colors">
+                  <td className="px-4 py-3 font-mono font-bold text-amber-400">
+                    {r.reference || `Rec #${idx + 1}`}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-gray-200">
+                    <div className="flex items-center gap-1.5">
+                      <span>{r.buyer ? `${r.buyer.slice(0, 6)}...${r.buyer.slice(-4)}` : "—"}</span>
+                      {r.buyer && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(r.buyer)}
+                          className="text-gray-500 hover:text-white transition-colors text-[11px]"
+                          title="Copy Wallet Address"
+                        >
+                          {copiedTx === r.buyer ? "✓" : "📋"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-bold text-white">
+                    {amount(r.amount)} SZ
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-emerald-400">
+                    ${amount(r.valueUsd)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-[11px]">
+                    {r.purchasedAt || (r.timestamp ? new Date(r.timestamp).toLocaleString() : "—")}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {r.txHash ? (
+                      <a
+                        href={`${EXPLORER}/tx/${r.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 font-bold rounded-lg text-[11px] inline-flex items-center gap-1 transition-colors"
+                      >
+                        View Receipt ↗
+                      </a>
+                    ) : (
+                      <span className="text-gray-500">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!filteredRecords.length && (
+            <div className="p-8 text-center text-gray-400 text-xs">
+              No recorded offline sales found. Use the "Record Offline Sale" tab to record a new offline sale.
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 export function AdminOperations({ tab }: { tab: AdminTab }) {
-  const { isAdmin, stats, admin, offline, readPackages } = useWeb3();
+  const { isAdmin, stats, admin, readPackages } = useWeb3();
   const [found, setFound] = useState<Package[]>([]),
     [lookupError, setLookupError] = useState("");
   if (!isAdmin)
@@ -816,17 +1264,64 @@ export function AdminOperations({ tab }: { tab: AdminTab }) {
         <p>Connect an account with the on-chain administrator role.</p>
       </Panel>
     );
-  const parseSale = (f: FormData): Sale => ({
-    buyer: String(f.get("buyer")),
-    amount: units(String(f.get("quantity"))),
-    value: units(String(f.get("value"))),
-    price: units(String(f.get("price"))),
-    purchasedAt: Math.floor(
-      new Date(String(f.get("purchased"))).getTime() / 1000
-    ),
-    startedAt: Math.floor(new Date(String(f.get("started"))).getTime() / 1000),
-    referenceId: hashId(String(f.get("reference"))),
-  });
+  const parseSale = (f: FormData): Sale => {
+    const buyer = String(f.get("buyer") || "").trim();
+    if (!isAddress(buyer)) {
+      throw Error(`Invalid buyer wallet address "${buyer}". Must be a valid 0x EVM address.`);
+    }
+
+    const refRaw = String(f.get("reference") || "").trim();
+    if (!refRaw) {
+      throw Error("Offline payment reference is required.");
+    }
+
+    const quantityStr = String(f.get("quantity") || "").trim();
+    const valueStr = String(f.get("value") || "").trim();
+    const priceStr = String(f.get("price") || "").trim();
+
+    const qty = units(quantityStr);
+    if (qty < 20n) {
+      throw Error("SZ quantity must be at least 0.000020 (20 units)");
+    }
+
+    const val = units(valueStr);
+    const prc = units(priceStr);
+
+    const purchasedRaw = String(f.get("purchased") || "");
+    const startedRaw = String(f.get("started") || "");
+
+    const purchasedDate = new Date(purchasedRaw);
+    const startedDate = new Date(startedRaw);
+
+    if (isNaN(purchasedDate.getTime())) {
+      throw Error("Please select a valid original purchase date & time");
+    }
+    if (isNaN(startedDate.getTime())) {
+      throw Error("Please select a valid staking start date & time");
+    }
+
+    let purchasedAt = Math.floor(purchasedDate.getTime() / 1000);
+    let startedAt = Math.floor(startedDate.getTime() / 1000);
+    const nowUnix = Math.floor(Date.now() / 1000);
+
+    // Ensure startedAt is not in the future relative to current block time
+    if (startedAt > nowUnix) {
+      startedAt = nowUnix;
+    }
+    if (purchasedAt > startedAt) {
+      purchasedAt = startedAt;
+    }
+
+    return {
+      buyer,
+      amount: qty,
+      value: val,
+      price: prc,
+      purchasedAt,
+      startedAt,
+      referenceId: hashId(refRaw),
+    };
+  };
   return (
     <>
       <Panel title="Treasury and custody">
@@ -866,30 +1361,13 @@ export function AdminOperations({ tab }: { tab: AdminTab }) {
         </>
       )}
       {tab === "offchain" && (
-        <ActionForm
-          title="Record offline sale"
-          submit={(f) => offline(parseSale(f))}
-        >
-          <Field name="buyer" label="Buyer wallet" />
-          <div className="columns">
-            <Field name="quantity" label="SZ quantity" />
-            <Field name="value" label="Original USD value" />
-            <Field name="price" label="Original SZ unit price" />
-          </div>
-          <div className="columns">
-            <Field
-              name="purchased"
-              label="Original purchase date"
-              type="datetime-local"
-            />
-            <Field
-              name="started"
-              label="Staking start date"
-              type="datetime-local"
-            />
-          </div>
-          <Field name="reference" label="Unique offline payment reference" />
-        </ActionForm>
+        <OfflineSalesFormSection parseSale={parseSale} />
+      )}
+      {tab === "offchain-history" && (
+        <OfflineSalesHistorySection />
+      )}
+      {tab === "replace-wallet" && (
+        <AdminWalletReplacementSection />
       )}
       {tab === "liquidity" && (
         <div className="columns">

@@ -28,3 +28,37 @@ export async function requestJson<T>(base: string, path: string): Promise<T> {
     throw new Error(unavailable);
   }
 }
+
+export async function postJson<T>(base: string, path: string, body: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${normalizeApiBase(base)}/${path.replace(/^\/+/, "")}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw new Error(unavailable);
+  }
+  if (!response.ok) {
+    let errMessage = unavailable;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error) errMessage = errJson.error;
+    } catch {}
+    throw new Error(errMessage);
+  }
+  const contentType = response.headers.get("content-type") || "";
+  if (!/^application\/(?:[\w.-]+\+)?json(?:\s*;|$)/i.test(contentType)) {
+    throw new Error(unavailable);
+  }
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error(unavailable);
+  }
+}

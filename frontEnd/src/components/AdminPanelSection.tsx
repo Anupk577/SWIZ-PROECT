@@ -8,12 +8,15 @@ import {
   ArrowLeftRight,
   Archive,
   Wallet,
+  UserCheck,
 } from "lucide-react";
 import { useWeb3 } from "../context/Web3Context";
 import { AdminOperations, type AdminTab } from "./ProtocolOperations";
 
 const tabs = [
-  { key: "offchain", label: "Offline Sales", icon: UserPlus },
+  { key: "offchain", label: "Record Offline Sale", icon: UserPlus },
+  { key: "offchain-history", label: "Offline Sales History", icon: History },
+  { key: "replace-wallet", label: "Replace Wallet", icon: UserCheck },
   { key: "liquidity", label: "Buyback Liquidity", icon: DollarSign },
   { key: "controls", label: "Protocol Controls", icon: Settings },
   { key: "records", label: "Wallets & Activity", icon: History },

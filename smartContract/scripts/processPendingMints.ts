@@ -1,16 +1,13 @@
 import { ethers } from "ethers";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 async function main() {
-  const amoyRpc = process.env.POLYGON_AMOY_RPC_URL || "https://polygon-amoy-bor-rpc.publicnode.com";
+  const amoyRpc = "https://polygon-amoy.g.alchemy.com/v2/SkzrI3058h3g92BAFz9fU";
   const provider = new ethers.JsonRpcProvider(amoyRpc);
 
-  const adminKey = process.env.ADMIN_PRIVATE_KEY || process.env.POLYGON_AMOY_PRIVATE_KEY || process.env.PRIVATE_KEY;
-  const relayerKey = process.env.RELAYER_PRIVATE_KEY || process.env.PRIVATE_KEY;
-  if (!adminKey || !relayerKey) throw new Error("Missing ADMIN_PRIVATE_KEY or RELAYER_PRIVATE_KEY in environment");
+  const adminKey = "a2b51f5b4ff4991f3dc2b671b3948920a6d006a79322913a5264f18d3c0fcbcf";
   const adminWallet = new ethers.Wallet(adminKey, provider);
+
+  const relayerKey = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
   const relayerWallet = new ethers.Wallet(relayerKey, provider);
 
   console.log(`Admin Wallet:   ${adminWallet.address}`);
