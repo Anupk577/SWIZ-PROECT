@@ -15,6 +15,7 @@ import {
 } from "../services/api";
 import { ADDRESSES, CHAIN_ID, EXPLORER, ADAPTER_ABI, WRAPPER_ABI, SZ_ABI } from "../constants/contracts";
 import { AdminWalletReplacementSection } from "./AdminWalletReplacementSection";
+import { Coins, ShieldCheck, DollarSign, Copy, Check, ExternalLink } from "lucide-react";
 const amount = (n: bigint | string | undefined) =>
   n === undefined ? "—" : formatUnits(n, 6);
 const date = (t: bigint | number) =>
@@ -274,6 +275,112 @@ function PackageTable({ packages }: { packages: Package[] }) {
     </>
   );
 }
+function getEventBadge(item: Activity) {
+  switch (item.type) {
+    case "WalletPaused":
+    case "PrimaryWalletPaused":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+          Primary Frozen
+        </span>
+      );
+    case "SecondaryWalletPaused":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-500/20 text-red-300 border border-red-500/30">
+          Secondary Frozen
+        </span>
+      );
+    case "WalletUnpaused":
+    case "PrimaryWalletUnpaused":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          Primary Restored
+        </span>
+      );
+    case "SecondaryWalletUnpaused":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          Secondary Restored
+        </span>
+      );
+    case "WalletReplaced":
+    case "SecondaryWalletReplaced":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+          Wallet Replaced
+        </span>
+      );
+    case "SecondaryWalletConfigured":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+          Secondary Configured
+        </span>
+      );
+    case "SecondaryWalletUpdated":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+          Secondary Updated
+        </span>
+      );
+    case "PackageCreated":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+          Package Created
+        </span>
+      );
+    case "OfflineRecorded":
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+          Offline Recorded
+        </span>
+      );
+    default:
+      return (
+        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-white/10 text-gray-300">
+          {item.type}
+        </span>
+      );
+  }
+}
+
+function getEventDetails(item: Activity) {
+  if (item.type.includes("Paused")) {
+    return item.reason ? (
+      <span className="text-gray-300 text-xs">{item.reason}</span>
+    ) : (
+      <span className="text-red-400 text-xs">Emergency Freeze</span>
+    );
+  }
+  if (item.type.includes("Unpaused")) {
+    return <span className="text-emerald-400 text-xs">Wallet Restored to Active</span>;
+  }
+  if (item.type.includes("Replaced")) {
+    if (item.newWallet || item.oldWallet) {
+      return (
+        <span className="text-xs font-mono text-gray-300">
+          {item.oldWallet ? `${item.oldWallet.slice(0, 6)}...` : ""} →{" "}
+          {item.newWallet ? `${item.newWallet.slice(0, 6)}...` : ""}
+        </span>
+      );
+    }
+    return <span className="text-xs text-blue-300">Replacement Complete</span>;
+  }
+  if (item.type === "SecondaryWalletConfigured" || item.type === "SecondaryWalletUpdated") {
+    const sec = item.secondaryWallet || item.newSecondaryWallet;
+    return sec ? (
+      <span className="text-xs font-mono text-purple-300">
+        Backup: {sec.slice(0, 6)}...{sec.slice(-4)}
+      </span>
+    ) : (
+      <span className="text-xs text-purple-300">Backup Wallet</span>
+    );
+  }
+  if (item.packageId) {
+    return <span className="text-xs font-mono font-bold text-white">Pkg #{item.packageId}</span>;
+  }
+  return <span className="text-gray-500">—</span>;
+}
+
 export function History({ all = false }: { all?: boolean }) {
   const { address } = useWeb3();
   const [items, setItems] = useState<Activity[]>([]),
@@ -317,7 +424,7 @@ export function History({ all = false }: { all?: boolean }) {
               <tr>
                 <th>Time</th>
                 <th>Event</th>
-                <th>Package</th>
+                <th>Details / Package</th>
                 <th>Transaction</th>
               </tr>
             </thead>
@@ -325,8 +432,8 @@ export function History({ all = false }: { all?: boolean }) {
               {items.map((i) => (
                 <tr key={i.id}>
                   <td>{new Date(i.timestamp).toLocaleString()}</td>
-                  <td>{i.type}</td>
-                  <td>{i.packageId || "—"}</td>
+                  <td>{getEventBadge(i)}</td>
+                  <td>{getEventDetails(i)}</td>
                   <td>
                     <Tx hash={i.txHash} />
                   </td>
@@ -1254,6 +1361,142 @@ function OfflineSalesHistorySection() {
   );
 }
 
+function TreasuryAndCustodyGrid({ stats }: { stats: any }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (text: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const treasuryAddr = stats?.treasury || "—";
+  const supplyStr = amount(stats?.supply);
+  const inventoryStr = amount(stats?.inventory);
+  const custodyStr = amount(stats?.custody);
+  const liabilitiesStr = amount(stats?.liabilities);
+  const fundsStr = amount(stats?.funds);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* 1. Treasury */}
+      <div className="bg-[#111520]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-xl space-y-2.5 relative overflow-hidden group hover:border-white/20 transition-all">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#E3262E] animate-pulse"></span>
+            Company Treasury
+          </span>
+          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
+            Multi-Sig
+          </span>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-1.5 p-2 bg-black/40 rounded-xl border border-white/5">
+            <span className="text-xs font-mono font-bold text-white truncate max-w-[150px]" title={treasuryAddr}>
+              {treasuryAddr !== "—" ? `${treasuryAddr.slice(0, 6)}...${treasuryAddr.slice(-4)}` : "—"}
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              {treasuryAddr !== "—" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(treasuryAddr)}
+                    className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                    title="Copy Address"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                  <a
+                    href={`${EXPLORER}/address/${treasuryAddr}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                    title="View on Explorer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-400">Protocol reserve destination</p>
+        </div>
+      </div>
+
+      {/* 2. Fixed Supply & Unsold Inventory */}
+      <div className="bg-[#111520]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-xl space-y-2.5 relative overflow-hidden group hover:border-white/20 transition-all">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <Coins className="w-3.5 h-3.5 text-amber-400" />
+            Supply & Inventory
+          </span>
+          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-[10px] font-bold text-blue-400">
+            Fixed Supply
+          </span>
+        </div>
+
+        <div className="space-y-0.5">
+          <div className="text-base font-black text-white">
+            {Number(supplyStr.replace(/,/g, "") || 0).toLocaleString()} <span className="text-xs font-bold text-gray-400">SZ</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-gray-400">
+            <span>Unsold:</span>
+            <span className="font-mono font-bold text-amber-400">
+              {Number(inventoryStr.replace(/,/g, "") || 0).toLocaleString()} SZ
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Package Liabilities & Custody */}
+      <div className="bg-[#111520]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-xl space-y-2.5 relative overflow-hidden group hover:border-white/20 transition-all">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            Package Custody
+          </span>
+          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
+            100% Backed
+          </span>
+        </div>
+
+        <div className="space-y-0.5">
+          <div className="text-base font-black text-white">
+            {Number(custodyStr.replace(/,/g, "") || 0).toLocaleString()} <span className="text-xs font-bold text-gray-400">SZ</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-gray-400">
+            <span>Liabilities:</span>
+            <span className="font-mono font-bold text-emerald-400">
+              {Number(liabilitiesStr.replace(/,/g, "") || 0).toLocaleString()} SZ
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Admin Buyback Liquidity */}
+      <div className="bg-[#111520]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-xl space-y-2.5 relative overflow-hidden group hover:border-white/20 transition-all">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+            <DollarSign className="w-3.5 h-3.5 text-[#E3262E]" />
+            Buyback Liquidity
+          </span>
+          <span className="px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-[10px] font-bold text-red-400">
+            Reserve
+          </span>
+        </div>
+
+        <div className="space-y-0.5">
+          <div className="text-base font-black text-white">
+            ${Number(fundsStr.replace(/,/g, "") || 0).toLocaleString()} <span className="text-xs font-bold text-gray-400">USDT.c</span>
+          </div>
+          <p className="text-[10px] text-gray-400">Programmatic reserve</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AdminOperations({ tab }: { tab: AdminTab }) {
   const { isAdmin, stats, admin, readPackages } = useWeb3();
   const [found, setFound] = useState<Package[]>([]),
@@ -1324,22 +1567,7 @@ export function AdminOperations({ tab }: { tab: AdminTab }) {
   };
   return (
     <>
-      <Panel title="Treasury and custody">
-        <dl>
-          <dt>Company treasury</dt>
-          <dd>{stats?.treasury}</dd>
-          <dt>Fixed supply / unsold inventory</dt>
-          <dd>
-            {amount(stats?.supply)} / {amount(stats?.inventory)} SZ
-          </dd>
-          <dt>Custody / package liabilities</dt>
-          <dd>
-            {amount(stats?.custody)} / {amount(stats?.liabilities)} SZ
-          </dd>
-          <dt>Admin buyback funding</dt>
-          <dd>{amount(stats?.funds)} USDT.c</dd>
-        </dl>
-      </Panel>
+      <TreasuryAndCustodyGrid stats={stats} />
       {tab === "controls" && (
         <>
           <div className="columns">

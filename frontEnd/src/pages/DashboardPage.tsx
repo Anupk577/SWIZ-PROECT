@@ -250,7 +250,7 @@ export const DashboardPage: React.FC = () => {
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>{secondaryWallet ? "Update Backup Wallet" : "Add Secondary Wallet"}</span>
+            <span>{secondaryWallet ? "View Backup Wallet" : "Add Secondary Wallet"}</span>
           </button>
         </div>
       </div>

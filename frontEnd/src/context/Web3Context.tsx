@@ -10,6 +10,7 @@ import {
 import {
   BrowserProvider,
   JsonRpcProvider,
+  FallbackProvider,
   Contract,
   isAddress,
   type ContractTransactionResponse,
@@ -22,7 +23,6 @@ import { appKitModal } from "../config/reown";
 import {
   ADDRESSES,
   CHAIN_ID,
-  RPC,
   RPC_ENDPOINTS,
   EXPLORER,
   SZ_ABI,
@@ -92,7 +92,7 @@ interface State {
   isSecondaryWalletModalOpen: boolean;
   openSecondaryWalletModal: () => void;
   closeSecondaryWalletModal: () => void;
-  saveSecondaryWallet: (secAddr: string, onChain?: boolean) => Promise<void>;
+  saveSecondaryWallet: (secAddr: string) => Promise<void>;
   refreshSecondaryWallet: () => Promise<void>;
   refresh: () => Promise<void>;
   connect: () => Promise<void>;
@@ -142,10 +142,18 @@ export function decodeWeb3Error(e: any): string {
 
 const Context = createContext<State | null>(null);
 const configured = Object.values(ADDRESSES).every(isAddress);
-const reader = new JsonRpcProvider(RPC, CHAIN_ID, {
-  staticNetwork: true,
-  batchMaxCount: 1,
-});
+const fallbackProviders = RPC_ENDPOINTS.map((url, i) => ({
+  provider: new JsonRpcProvider(url, CHAIN_ID, {
+    staticNetwork: true,
+    batchMaxCount: 1,
+  }),
+  priority: i + 1,
+  weight: 1,
+}));
+const reader =
+  fallbackProviders.length > 1
+    ? new FallbackProvider(fallbackProviders, CHAIN_ID)
+    : fallbackProviders[0].provider;
 const contract = () => {
   if (!configured)
     throw Error("Contracts are not configured for this environment");
@@ -319,7 +327,12 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (address && isConnected) {
+      if (isAdmin) {
+        setIsSecondaryWalletModalOpen(false);
+        return;
+      }
       void fetchSecondaryWallet(address).then((sec) => {
+        if (isAdmin) return;
         const sessionDismissed = sessionStorage.getItem(
           `sz_dismiss_secondary_${address.toLowerCase()}`
         );
@@ -337,33 +350,20 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       setSecondaryWalletStatus(null);
       setIsSecondaryWalletModalOpen(false);
     }
-  }, [address, isConnected, fetchSecondaryWallet]);
+  }, [address, isConnected, isAdmin, fetchSecondaryWallet]);
 
-  const saveSecondaryWallet = async (secAddr: string, onChain = false) => {
+  const saveSecondaryWallet = async (secAddr: string) => {
     if (!address) throw new Error("Wallet not connected");
     if (!isAddress(secAddr)) throw new Error("Invalid secondary wallet address");
     if (secAddr.toLowerCase() === address.toLowerCase()) {
       throw new Error("Secondary wallet cannot be the same as primary wallet");
     }
 
+    // Configure secondary wallet strictly in protocol database (Instant & Gas-Free)
     await apiPost("/user/secondary-wallet", {
       primaryWallet: address,
       secondaryWallet: secAddr,
     });
-
-    if (onChain) {
-      const s = await signer();
-      const szContract = new Contract(ADDRESSES.sz, SZ_ABI, s);
-      let gasLimit: bigint;
-      try {
-        const estimated = await szContract.setSecondaryWallet.estimateGas(secAddr);
-        gasLimit = (estimated * 130n) / 100n;
-      } catch {
-        gasLimit = 200_000n;
-      }
-      const tx = await szContract.setSecondaryWallet(secAddr, { gasLimit });
-      await tx.wait();
-    }
 
     setSecondaryWalletState(secAddr);
     setSecondaryWalletStatus("ACTIVE");
@@ -541,6 +541,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         "closeMigration",
         "importHistoricalSale",
         "replaceWallet",
+        "setWalletPaused",
+        "setSecondaryWalletByAdmin",
       ];
       if (!allowed.includes(method)) throw Error("Unsupported action");
       if (method === "addTreasuryFunds") {
@@ -696,7 +698,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         secondaryWallet,
         secondaryWalletStatus,
         isSecondaryWalletModalOpen,
-        openSecondaryWalletModal: () => setIsSecondaryWalletModalOpen(true),
+        openSecondaryWalletModal: () => {
+          if (isAdmin) return;
+          setIsSecondaryWalletModalOpen(true);
+        },
         closeSecondaryWalletModal: () => {
           if (address) {
             sessionStorage.setItem(

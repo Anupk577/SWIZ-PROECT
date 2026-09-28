@@ -48,17 +48,298 @@ export function api({ store, protocol, config, status }) {
       res.json(jsonSafe({ packages }));
     })
   );
-  router.get("/transactions/:user", (req, res) => {
-    if (!validAddress(req.params.user))
-      return res.status(400).json({ error: "Invalid wallet" });
-    res.json({ transactions: store.events(req.params.user) });
-  });
-  router.get("/events", (_, res) => res.json({ transactions: store.events() }));
-  router.get("/deposits", (req, res) => {
-    if (req.query.user && !validAddress(req.query.user))
-      return res.status(400).json({ error: "Invalid wallet" });
-    res.json({ deposits: store.deposits(req.query.user) });
-  });
+  router.get(
+    "/transactions/:user",
+    run((req, res) => {
+      const user = req.params.user?.trim();
+      if (!validAddress(user))
+        return res.status(400).json({ error: "Invalid wallet" });
+      res.json({ transactions: store.events(user) });
+    })
+  );
+  router.get(
+    "/events",
+    run((_, res) => res.json({ transactions: store.events() }))
+  );
+  router.get(
+    "/deposits",
+    run((req, res) => {
+      const user = req.query.user ? String(req.query.user).trim() : null;
+      if (user && !validAddress(user))
+        return res.status(400).json({ error: "Invalid wallet" });
+      res.json({ deposits: store.deposits(user) });
+    })
+  );
+  router.get(
+    "/user/secondary-wallet/:wallet",
+    run(async (req, res) => {
+      const wallet = req.params.wallet?.trim();
+      if (!validAddress(wallet))
+        return res.status(400).json({ error: "Invalid wallet address" });
+      const record = store.getSecondaryWallet(wallet);
+      let onChainSecondary = null;
+      try {
+        if (protocol?.sz?.secondaryWallets) {
+          const addr = await protocol.sz.secondaryWallets(wallet);
+          if (addr && addr !== "0x0000000000000000000000000000000000000000") {
+            onChainSecondary = addr;
+          }
+        }
+      } catch {}
+      const secondaryWallet = record?.secondary_wallet || onChainSecondary || null;
+      const isLocked = Boolean(secondaryWallet);
+      res.json({
+        primaryWallet: wallet,
+        secondaryWallet,
+        status: record?.status || (onChainSecondary ? "ACTIVE" : "UNSET"),
+        onChainSecondaryWallet: onChainSecondary,
+        isLocked,
+        canUpdate: !isLocked,
+        createdAt: record?.created_at || null,
+        updatedAt: record?.updated_at || null,
+      });
+    })
+  );
+  router.post(
+    "/user/secondary-wallet",
+    run(async (req, res) => {
+      const primaryWallet = req.body?.primaryWallet?.trim();
+      const secondaryWallet = req.body?.secondaryWallet?.trim();
+      if (!validAddress(primaryWallet) || !validAddress(secondaryWallet)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid primary or secondary wallet address" });
+      }
+      if (primaryWallet.toLowerCase() === secondaryWallet.toLowerCase()) {
+        return res
+          .status(400)
+          .json({ error: "Secondary wallet cannot be the same as primary wallet" });
+      }
+      const existing = store.getSecondaryWallet(primaryWallet);
+      let onChainSecondary = null;
+      try {
+        if (protocol?.sz?.secondaryWallets) {
+          const addr = await protocol.sz.secondaryWallets(primaryWallet);
+          if (addr && addr !== "0x0000000000000000000000000000000000000000") {
+            onChainSecondary = addr;
+          }
+        }
+      } catch {}
+
+      if ((existing && existing.secondary_wallet) || onChainSecondary) {
+        return res.status(403).json({
+          error:
+            "Secondary wallet is already configured. Every user can only set their secondary wallet once; once set, it cannot be updated.",
+        });
+      }
+      const record = store.setSecondaryWallet(primaryWallet, secondaryWallet);
+      res.json({
+        success: true,
+        message: "Secondary wallet configured successfully in database",
+        ...record,
+      });
+    })
+  );
+  router.get(
+    "/admin/user-details/:wallet",
+    run(async (req, res) => {
+      const wallet = req.params.wallet;
+      if (!validAddress(wallet))
+        return res.status(400).json({ error: "Invalid wallet address" });
+
+      const record = store.getSecondaryWallet(wallet);
+      let onChainSecondary = null;
+      let ids = [];
+      let packages = [];
+      let activeCount = 0;
+      let szBalance = "0";
+
+      try {
+        if (protocol?.sz) {
+          const [rawIds, onChainSec, activeBig, balBig] = await Promise.all([
+            protocol.sz.getUserPackageIds(wallet).catch(() => []),
+            protocol.sz.secondaryWallets(wallet).catch(() => null),
+            protocol.sz.activePackages(wallet).catch(() => 0n),
+            protocol.sz.balanceOf(wallet).catch(() => 0n),
+          ]);
+          ids = rawIds;
+          activeCount = Number(activeBig);
+          szBalance = balBig.toString();
+          if (
+            onChainSec &&
+            onChainSec !== "0x0000000000000000000000000000000000000000"
+          ) {
+            onChainSecondary = onChainSec;
+          }
+          packages = await Promise.all(
+            ids.map((id) => protocol.sz.packages(id).then((p) => p.toObject()))
+          );
+        }
+      } catch (err) {
+        console.error("Error reading chain details:", err);
+      }
+
+      const deposits = store.deposits(wallet);
+      const events = store.events(wallet);
+      const replacements = store.getWalletReplacements(wallet);
+
+      const secWallet = record?.secondary_wallet || onChainSecondary || null;
+      const isSecPaused = secWallet ? store.isWalletPaused(secWallet) : false;
+      const secPauseInfo = secWallet ? store.getWalletPauseInfo(secWallet) : null;
+
+      res.json(
+        jsonSafe({
+          primaryWallet: wallet,
+          secondaryWallet: secWallet,
+          secondaryWalletStatus:
+            record?.status || (onChainSecondary ? "ACTIVE" : "UNSET"),
+          onChainSecondaryWallet: onChainSecondary,
+          createdAt: record?.created_at || null,
+          updatedAt: record?.updated_at || null,
+          packageCount: packages.length,
+          activePackages: activeCount,
+          szBalance,
+          packages,
+          depositCount: deposits.length,
+          deposits,
+          eventCount: events.length,
+          events,
+          replacements,
+          isPaused: store.isWalletPaused(wallet),
+          pauseInfo: store.getWalletPauseInfo(wallet),
+          isSecondaryPaused: isSecPaused,
+          secondaryPauseInfo: secPauseInfo,
+        })
+      );
+    })
+  );
+  router.get(
+    "/user/paused-status/:wallet",
+    run((req, res) => {
+      const wallet = req.params.wallet?.trim();
+      if (!validAddress(wallet)) {
+        return res.status(400).json({ error: "Invalid wallet address" });
+      }
+      const isPaused = store.isWalletPaused(wallet);
+      const pauseInfo = store.getWalletPauseInfo(wallet);
+      res.json({ wallet, isPaused, pauseInfo });
+    })
+  );
+  router.post(
+    "/admin/pause-wallet",
+    run((req, res) => {
+      const wallet = req.body?.wallet?.trim();
+      const { isPaused, reason, txHash } = req.body || {};
+      if (!validAddress(wallet)) {
+        return res.status(400).json({ error: "Invalid wallet address" });
+      }
+      const sanitizedReason = typeof reason === "string" ? reason.slice(0, 500) : "";
+      const sanitizedTxHash = typeof txHash === "string" ? txHash.slice(0, 100) : "";
+      const result = store.setWalletPaused(
+        wallet,
+        Boolean(isPaused),
+        sanitizedReason || (isPaused ? "Emergency admin freeze" : "Admin unpaused"),
+        sanitizedTxHash
+      );
+      res.json({
+        success: true,
+        message: isPaused
+          ? "Wallet paused / frozen successfully"
+          : "Wallet unpaused successfully",
+        ...result,
+      });
+    })
+  );
+  router.get(
+    "/admin/security-activity",
+    run((req, res) => {
+      const wallet = req.query.wallet ? String(req.query.wallet).trim() : null;
+      if (wallet && !validAddress(wallet)) {
+        return res.status(400).json({ error: "Invalid wallet address query parameter" });
+      }
+      const activities = store.securityAudit(wallet);
+      res.json(
+        jsonSafe({
+          total: activities.length,
+          activities,
+        })
+      );
+    })
+  );
+  router.post(
+    "/admin/update-secondary-wallet",
+    run((req, res) => {
+      const primaryWallet = req.body?.primaryWallet?.trim();
+      const secondaryWallet = req.body?.secondaryWallet?.trim();
+      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.slice(0, 100) : "";
+      if (!validAddress(primaryWallet) || !validAddress(secondaryWallet)) {
+        return res.status(400).json({ error: "Invalid primary or secondary wallet address" });
+      }
+      if (primaryWallet.toLowerCase() === secondaryWallet.toLowerCase()) {
+        return res.status(400).json({ error: "Secondary wallet cannot be identical to primary wallet" });
+      }
+      const existing = store.getSecondaryWallet(primaryWallet);
+      if (!existing || !existing.secondary_wallet) {
+        return res.status(400).json({
+          error: "Cannot change secondary wallet: User has not recorded a secondary wallet. Admin can only pause the primary wallet.",
+        });
+      }
+      const record = store.setSecondaryWallet(primaryWallet, secondaryWallet, txHash);
+      res.json({
+        success: true,
+        message: "Secondary wallet updated successfully by administrator",
+        ...record,
+      });
+    })
+  );
+  router.post(
+    "/admin/replace-wallet",
+    run((req, res) => {
+      const oldWallet = req.body?.oldWallet?.trim();
+      const newWallet = req.body?.newWallet?.trim();
+      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.slice(0, 100) : null;
+      const packagesMigrated = Number(req.body?.packagesMigrated || 0);
+      if (!validAddress(oldWallet) || !validAddress(newWallet)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid old or new wallet address" });
+      }
+      if (oldWallet.toLowerCase() === newWallet.toLowerCase()) {
+        return res
+          .status(400)
+          .json({ error: "Old and new wallet must be different" });
+      }
+      const existing = store.getSecondaryWallet(oldWallet);
+      if (!existing || !existing.secondary_wallet || existing.status === "REPLACED") {
+        return res.status(400).json({
+          error: "Cannot replace wallet: User primary wallet has already been replaced or has not recorded a secondary wallet.",
+        });
+      }
+      const result = store.replaceWalletOffchain(
+        oldWallet,
+        newWallet,
+        txHash,
+        packagesMigrated
+      );
+      res.json({
+        success: true,
+        message: "Wallet replaced successfully in off-chain database",
+        result,
+      });
+    })
+  );
+  router.get(
+    ["/admin/replacements", "/admin/wallet-replacements"],
+    run((req, res) => {
+      const replacements = store.getWalletReplacements(null);
+      res.json(
+        jsonSafe({
+          total: replacements.length,
+          replacements,
+        })
+      );
+    })
+  );
   router.post(["/packages/buy", "/admin/record-offchain-sale"], (_, res) =>
     res
       .status(410)

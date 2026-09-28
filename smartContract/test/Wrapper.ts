@@ -23,6 +23,10 @@ describe("One-way wrapper and source adapter", () => {
     await expect(
       w.connect(r).mintDeposit(user.address, 1000000, 2, adapter.address, 2, tx)
     ).revert(ethers);
+    // Non-relayer must be blocked
+    await expect(
+      w.connect(user).mintDeposit(user.address, 1000000, 1, adapter.address, 3, tx)
+    ).revert(ethers);
   });
   it("transfers exact approved source token to treasury and normalizes decimals", async () => {
     const [a, treasury, user] = await ethers.getSigners();

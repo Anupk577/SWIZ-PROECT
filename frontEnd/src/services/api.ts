@@ -32,6 +32,18 @@ export interface Activity {
   usdtAmount?: string;
   etAmount?: string;
   status: string;
+  user?: string;
+  wallet?: string;
+  primaryWallet?: string;
+  secondaryWallet?: string;
+  oldWallet?: string;
+  newWallet?: string;
+  oldSecondaryWallet?: string;
+  newSecondaryWallet?: string;
+  isPaused?: boolean;
+  reason?: string;
+  packagesMigrated?: number;
+  role?: string;
 }
 export interface Deposit {
   id: string;
@@ -48,6 +60,8 @@ export interface SecondaryWalletResponse {
   secondaryWallet: string | null;
   status: "ACTIVE" | "REPLACED" | "UNSET";
   onChainSecondaryWallet: string | null;
+  isLocked?: boolean;
+  canUpdate?: boolean;
   createdAt: number | null;
   updatedAt: number | null;
 }
@@ -74,4 +88,22 @@ export interface UserDetailsResponse {
     tx_hash: string | null;
     timestamp: number;
   }>;
+  isPaused?: boolean;
+  pauseInfo?: {
+    wallet: string;
+    is_paused: boolean;
+    reason: string;
+    updated_at: number | null;
+  };
+  isSecondaryPaused?: boolean;
+  secondaryPauseInfo?: {
+    wallet: string;
+    is_paused: boolean;
+    reason: string;
+    updated_at: number | null;
+  };
+}
+export interface SecurityActivityResponse {
+  total: number;
+  activities: Activity[];
 }

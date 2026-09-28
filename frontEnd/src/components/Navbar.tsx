@@ -38,39 +38,43 @@ export const Navbar: React.FC = () => {
     <header className="sticky top-0 z-40 w-full bg-black/95 backdrop-blur-2xl border-b border-white/10 border-t-2 border-t-[#E3262E]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-20 py-3 flex flex-wrap gap-4 items-center justify-between">
         {/* Brand Dark Swiz Logo Component */}
-        <Link to="/" className="cursor-pointer">
+        <Link to={walletState.isAdmin ? "/admin" : "/"} className="cursor-pointer">
           <SwizLogo size="md" />
         </Link>
 
         {/* Center Navigation Bar Pill Container */}
         <nav className="hidden md:flex items-center gap-1.5 bg-[#111520] p-1.5 border border-white/10 rounded-2xl shadow-inner">
-          <NavLink to="/" end className={navButtonClass}>
-            <Home className="w-4 h-4" />
-            <span>Home</span>
-          </NavLink>
-
-          <NavLink to="/buy" className={navButtonClass}>
-            <ShoppingCart className="w-4 h-4" />
-            <span>Buy Swiz</span>
-          </NavLink>
-
-          <NavLink to="/bridge" className={navButtonClass}>
-            <ArrowLeftRight className="w-4 h-4" />
-            <span>Bridge USDT</span>
-          </NavLink>
-
-          {walletState.isAdmin && (
+          {walletState.isAdmin ? (
+            /* ADMIN VIEW: ONLY Admin permissions alone! */
             <NavLink to="/admin" className={navButtonClass}>
               <Shield className="w-4 h-4" />
-              <span>Admin</span>
+              <span>Admin Console</span>
             </NavLink>
-          )}
+          ) : (
+            /* USER VIEW: Home, Buy, Bridge, Dashboard */
+            <>
+              <NavLink to="/" end className={navButtonClass}>
+                <Home className="w-4 h-4" />
+                <span>Home</span>
+              </NavLink>
 
-          {walletState.isConnected && (
-            <NavLink to="/dashboard" className={navButtonClass}>
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Dashboard</span>
-            </NavLink>
+              <NavLink to="/buy" className={navButtonClass}>
+                <ShoppingCart className="w-4 h-4" />
+                <span>Buy Swiz</span>
+              </NavLink>
+
+              <NavLink to="/bridge" className={navButtonClass}>
+                <ArrowLeftRight className="w-4 h-4" />
+                <span>Bridge USDT</span>
+              </NavLink>
+
+              {walletState.isConnected && (
+                <NavLink to="/dashboard" className={navButtonClass}>
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Dashboard</span>
+                </NavLink>
+              )}
+            </>
           )}
         </nav>
 
@@ -83,13 +87,13 @@ export const Navbar: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
 
-          {/* Secondary Wallet Quick-Status Pill */}
-          {walletState.isConnected && (
+          {/* Secondary Wallet Quick-Status Pill (USERS ONLY - Never shown to admin) */}
+          {walletState.isConnected && !walletState.isAdmin && (
             <button
               onClick={openSecondaryWalletModal}
               title={
                 secondaryWallet
-                  ? `Secondary Backup Wallet: ${secondaryWallet} (Click to view/update)`
+                  ? `Secondary Backup Wallet: ${secondaryWallet} (Click to view backup wallet)`
                   : "Add Secondary Backup Wallet to protect your assets"
               }
               className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
@@ -112,12 +116,17 @@ export const Navbar: React.FC = () => {
             <div className="flex items-center gap-2 bg-[#111520] border border-white/10 p-1.5 rounded-xl">
               <div className="px-3.5 py-1.5 bg-[#E3262E]/15 rounded-lg text-xs font-mono font-bold text-white flex items-center gap-2 border border-[#E3262E]/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                {shortenAddress(walletState.address)}
+                <span>{shortenAddress(walletState.address)}</span>
+                {walletState.isAdmin && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase bg-[#E3262E] text-white tracking-wider">
+                    ADMIN
+                  </span>
+                )}
               </div>
               <button
                 onClick={disconnectWallet}
                 title="Disconnect Wallet"
-                className="p-2 text-gray-400 hover:text-[#E3262E] hover:bg-[#E3262E]/10 rounded-lg transition-colors"
+                className="p-2 text-gray-400 hover:text-[#E3262E] hover:bg-[#E3262E]/10 rounded-lg transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -125,7 +134,7 @@ export const Navbar: React.FC = () => {
           ) : (
             <button
               onClick={connectWallet}
-              className="bg-[#E3262E] hover:bg-red-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-[#E3262E]/25 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+              className="bg-[#E3262E] hover:bg-red-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-[#E3262E]/25 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
               <span>Connect Wallet</span>
@@ -136,60 +145,64 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Navigation Bar */}
       <div className="md:hidden flex items-center justify-around bg-[#0B0E14] border-t border-white/10 py-2.5 px-3">
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
-              isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
-            }`
-          }
-        >
-          Home
-        </NavLink>
-        <NavLink
-          to="/buy"
-          className={({ isActive }) =>
-            `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
-              isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
-            }`
-          }
-        >
-          Buy Swiz
-        </NavLink>
-        <NavLink
-          to="/bridge"
-          className={({ isActive }) =>
-            `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
-              isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
-            }`
-          }
-        >
-          Bridge
-        </NavLink>
-        {walletState.isAdmin && (
+        {walletState.isAdmin ? (
           <NavLink
             to="/admin"
             className={({ isActive }) =>
-              `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+              `text-xs font-extrabold px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
                 isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
               }`
             }
           >
-            Admin
+            <Shield className="w-4 h-4" />
+            <span>Admin Console</span>
           </NavLink>
-        )}
-        {walletState.isConnected && (
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) =>
-              `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
-                isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
-              }`
-            }
-          >
-            Dashboard
-          </NavLink>
+        ) : (
+          <>
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                  isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
+                }`
+              }
+            >
+              Home
+            </NavLink>
+            <NavLink
+              to="/buy"
+              className={({ isActive }) =>
+                `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                  isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
+                }`
+              }
+            >
+              Buy Swiz
+            </NavLink>
+            <NavLink
+              to="/bridge"
+              className={({ isActive }) =>
+                `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                  isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
+                }`
+              }
+            >
+              Bridge
+            </NavLink>
+            {walletState.isConnected && (
+              <NavLink
+                to="/dashboard"
+                className={({ isActive }) =>
+                  `text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                    isActive ? "bg-[#E3262E] text-white" : "text-gray-400 hover:text-white"
+                  }`
+                }
+              >
+                Dashboard
+              </NavLink>
+            )}
+          </>
         )}
       </div>
     </header>

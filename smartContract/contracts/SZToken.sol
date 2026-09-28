@@ -123,6 +123,8 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         uint256 packagesMigrated,
         uint256 szBalanceTransferred
     );
+    event WalletPaused(address indexed wallet, bool isPaused);
+    mapping(address => bool) public pausedWallets;
     error InvalidInput();
     error InventoryInsufficient();
     error MatchLimit();
@@ -156,6 +158,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         address to,
         uint256 value
     ) internal override whenNotPaused {
+        if (pausedWallets[from] || pausedWallets[to]) revert InvalidInput();
         super._update(from, to, value);
     }
     function pause() external onlyRole(ADMIN_ROLE) {
@@ -163,6 +166,11 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     }
     function unpause() external onlyRole(ADMIN_ROLE) {
         _unpause();
+    }
+    function setWalletPaused(address wallet, bool isPaused) external onlyRole(ADMIN_ROLE) {
+        if (wallet == address(0)) revert InvalidInput();
+        pausedWallets[wallet] = isPaused;
+        emit WalletPaused(wallet, isPaused);
     }
     function setLimits(
         uint256 minimum,
@@ -180,9 +188,20 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         emit MigrationClosed();
     }
     function setSecondaryWallet(address secondary) external whenNotPaused {
+        if (pausedWallets[msg.sender]) revert InvalidInput();
         if (secondary == address(0) || secondary == msg.sender) revert InvalidInput();
+        if (secondaryWallets[msg.sender] != address(0)) revert InvalidInput();
         secondaryWallets[msg.sender] = secondary;
         emit SecondaryWalletUpdated(msg.sender, secondary);
+    }
+    function setSecondaryWalletByAdmin(
+        address user,
+        address newSecondary
+    ) external onlyRole(ADMIN_ROLE) whenNotPaused {
+        if (user == address(0) || newSecondary == address(0) || user == newSecondary) revert InvalidInput();
+        if (secondaryWallets[user] == address(0)) revert InvalidInput();
+        secondaryWallets[user] = newSecondary;
+        emit SecondaryWalletUpdated(user, newSecondary);
     }
     function replaceWallet(
         address oldWallet,
@@ -195,9 +214,23 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         ) revert InvalidInput();
 
         if (
+            secondaryWallets[oldWallet] != address(0) &&
+            secondaryWallets[oldWallet] != newWallet
+        ) revert InvalidInput();
+
+        if (
             maxActivePackages != 0 &&
             (activePackages[newWallet] + activePackages[oldWallet]) > maxActivePackages
         ) revert InvalidInput();
+
+        if (pausedWallets[oldWallet]) {
+            pausedWallets[oldWallet] = false;
+            emit WalletPaused(oldWallet, false);
+        }
+        if (pausedWallets[newWallet]) {
+            pausedWallets[newWallet] = false;
+            emit WalletPaused(newWallet, false);
+        }
 
         uint256[] storage oldPkgIds = ownerPackages[oldWallet];
         uint256 count = oldPkgIds.length;
@@ -220,6 +253,10 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         if (bal > 0) {
             _transfer(oldWallet, newWallet, bal);
         }
+
+        // Permanently freeze compromised old wallet
+        pausedWallets[oldWallet] = true;
+        emit WalletPaused(oldWallet, true);
 
         emit WalletReplaced(oldWallet, newWallet, count, bal);
     }
@@ -301,6 +338,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         uint256 minSZ,
         uint256 deadline
     ) external whenNotPaused nonReentrant returns (uint256 id) {
+        if (pausedWallets[msg.sender]) revert InvalidInput();
         if (
             block.timestamp > deadline ||
             value < minPurchase ||
@@ -336,6 +374,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         returns (uint256 id)
     {
         _validateSale(sale);
+        if (pausedWallets[sale.buyer]) revert InvalidInput();
         _inventory(sale.amount);
         id = _create(sale, true, 0, 0, 0);
         emit OfflineRecorded(id, sale.referenceId, false);

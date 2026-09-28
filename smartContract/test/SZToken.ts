@@ -319,6 +319,17 @@ describe("Accounting failure paths and conservation", () => {
         .withArgs(alice.address, bob.address);
       expect(await sz.secondaryWallets(alice.address)).eq(bob.address);
     });
+    it("prohibits user from updating secondary wallet once it is set", async () => {
+      const { sz, alice, bob } = await fixture();
+      const signers = await ethers.getSigners();
+      const charlie = signers[5];
+      await sz.connect(alice).setSecondaryWallet(bob.address);
+      expect(await sz.secondaryWallets(alice.address)).eq(bob.address);
+
+      // Attempting to update secondary wallet must revert
+      await expect(sz.connect(alice).setSecondaryWallet(charlie.address)).revert(ethers);
+      expect(await sz.secondaryWallets(alice.address)).eq(bob.address);
+    });
     it("restricts replaceWallet to admin and validates inputs", async () => {
       const { sz, alice, bob } = await fixture();
       await expect(sz.connect(alice).replaceWallet(alice.address, bob.address)).revert(ethers);
@@ -348,12 +359,71 @@ describe("Accounting failure paths and conservation", () => {
       expect(await sz.activePackages(bob.address)).eq(1);
       expect((await sz.packages(1)).owner).eq(bob.address);
 
-      // Now bob buys, matching the unlocked package, payout must go to Bob (not Alice)
-      const [,,, buyer] = await ethers.getSigners();
+      // Alice is frozen and cannot buy
+      await expect(
+        sz.connect(alice).purchase(5n * U, 5n * U, (await networkHelpers.time.latest()) + 60)
+      ).revert(ethers);
+
+      // Now a new buyer buys, matching the unlocked package, payout must go to Bob (not Alice)
+      const signers = await ethers.getSigners();
+      const buyer = signers[5];
       await mint(buyer, 5n * U);
       await sz.connect(buyer).purchase(5n * U, 5n * U, (await networkHelpers.time.latest()) + 60);
       expect(await usdt.balanceOf(alice.address)).eq(0n);
       expect(await usdt.balanceOf(bob.address)).eq(5n * U);
+    });
+    it("prohibits replaceWallet if newWallet does not match recorded secondary wallet", async () => {
+      const { sz, alice, bob } = await fixture();
+      const [, , , eve] = await ethers.getSigners();
+      await sz.connect(alice).setSecondaryWallet(bob.address);
+      await expect(sz.replaceWallet(alice.address, eve.address)).revert(ethers);
+    });
+    it("allows admin to pause and unpause individual primary wallets", async () => {
+      const { sz, alice, bob } = await fixture();
+      const [, treasury] = await ethers.getSigners();
+      // Transfer tokens to Alice from treasury
+      await sz.connect(treasury).transfer(alice.address, 100n * U);
+      expect(await sz.balanceOf(alice.address)).eq(100n * U);
+
+      // Admin pauses Alice's wallet
+      await expect(sz.setWalletPaused(alice.address, true))
+        .to.emit(sz, "WalletPaused")
+        .withArgs(alice.address, true);
+      expect(await sz.pausedWallets(alice.address)).eq(true);
+
+      // Alice cannot transfer when paused
+      await expect(sz.connect(alice).transfer(bob.address, 10n * U)).revert(ethers);
+
+      // Alice cannot set secondary wallet when paused
+      await expect(sz.connect(alice).setSecondaryWallet(bob.address)).revert(ethers);
+
+      // Admin unpauses Alice's wallet
+      await expect(sz.setWalletPaused(alice.address, false))
+        .to.emit(sz, "WalletPaused")
+        .withArgs(alice.address, false);
+      expect(await sz.pausedWallets(alice.address)).eq(false);
+
+      // Alice can now transfer
+      await sz.connect(alice).transfer(bob.address, 10n * U);
+      expect(await sz.balanceOf(bob.address)).eq(10n * U);
+    });
+    it("allows admin to update secondary wallet only if user has already recorded one", async () => {
+      const { sz, alice, bob } = await fixture();
+      const signers = await ethers.getSigners();
+      const charlie = signers[5];
+
+      // Alice hasn't recorded: admin update fails
+      await expect(sz.setSecondaryWalletByAdmin(alice.address, bob.address)).revert(ethers);
+
+      // Alice records bob as secondary wallet
+      await sz.connect(alice).setSecondaryWallet(bob.address);
+      expect(await sz.secondaryWallets(alice.address)).eq(bob.address);
+
+      // Admin updates Alice's secondary wallet to Charlie
+      await expect(sz.setSecondaryWalletByAdmin(alice.address, charlie.address))
+        .to.emit(sz, "SecondaryWalletUpdated")
+        .withArgs(alice.address, charlie.address);
+      expect(await sz.secondaryWallets(alice.address)).eq(charlie.address);
     });
   });
 });

@@ -84,7 +84,7 @@ export class Bridge {
     const finalized = (await s.provider.getBlockNumber()) - s.confirmations;
     const from = this.store.cursor(`source:${s.chainId}`, s.startBlock - 1) + 1;
     if (from > finalized) return;
-    const to = Math.min(finalized, from + 999);
+    const to = Math.min(finalized, from + 9);
     const logs = await s.contract.queryFilter(
       s.contract.filters.Deposited(),
       from,

@@ -1,4 +1,4 @@
-> Historical prototype documentation. Superseded by the repository root README.md and docs/IMPLEMENTATION.md. Old APIs, addresses and acceptance claims below do not describe the current implementation.
+> Historical prototype documentation. Superseded by the repository root README.md and IMPLEMENTATION.md. Old APIs, addresses and acceptance claims below do not describe the current implementation.
 
 # React + TypeScript + Vite
 

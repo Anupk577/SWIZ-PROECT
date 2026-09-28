@@ -59,7 +59,7 @@ contract USDTcWrapper is ERC20, AccessControlEnumerable, Pausable {
         address adapter,
         uint256 nonce,
         bytes32 sourceTx
-    ) external whenNotPaused {
+    ) external onlyRole(BRIDGE_RELAYER_ROLE) whenNotPaused {
         require(
             recipient != address(0) &&
                 amount > 0 &&
