@@ -212,7 +212,17 @@ export class Store {
         .get(primaryWallet.toLowerCase()) ?? null
     );
   }
-  setSecondaryWallet(primaryWallet, secondaryWallet, txHash = "") {
+  getPrimaryForSecondaryWallet(secondaryWallet) {
+    if (!secondaryWallet) return null;
+    return (
+      this.db
+        .prepare(
+          "SELECT primary_wallet, status, created_at, updated_at FROM secondary_wallets WHERE secondary_wallet=?"
+        )
+        .get(secondaryWallet.toLowerCase()) ?? null
+    );
+  }
+  setSecondaryWallet(primaryWallet, secondaryWallet, status = "PENDING_ACTIVATION", txHash = "") {
     return this.transaction(() => {
       const p = primaryWallet.toLowerCase();
       const s = secondaryWallet.toLowerCase();
@@ -229,10 +239,10 @@ export class Store {
       this.db
         .prepare(
           `INSERT INTO secondary_wallets (primary_wallet, secondary_wallet, status, created_at, updated_at)
-           VALUES (?, ?, 'ACTIVE', ?, ?)
-           ON CONFLICT(primary_wallet) DO UPDATE SET secondary_wallet=excluded.secondary_wallet, status='ACTIVE', updated_at=excluded.updated_at`
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(primary_wallet) DO UPDATE SET secondary_wallet=excluded.secondary_wallet, status=excluded.status, updated_at=excluded.updated_at`
         )
-        .run(p, s, now, now);
+        .run(p, s, status, now, now);
 
       const eventType = isUpdate ? "SecondaryWalletUpdated" : "SecondaryWalletConfigured";
 
@@ -249,7 +259,7 @@ export class Store {
           oldSecondaryWallet: oldSecondary,
           newSecondaryWallet: s,
           role: "PRIMARY_WALLET",
-          status: "ACTIVE",
+          status,
           txHash: txHash || "",
           timestamp: now,
         },
@@ -268,7 +278,7 @@ export class Store {
           oldSecondaryWallet: oldSecondary,
           newSecondaryWallet: s,
           role: "SECONDARY_WALLET",
-          status: "ACTIVE",
+          status,
           txHash: txHash || "",
           timestamp: now,
         },
@@ -297,8 +307,107 @@ export class Store {
       return {
         primary_wallet: p,
         secondary_wallet: s,
-        status: "ACTIVE",
+        status,
         created_at: now,
+        updated_at: now,
+        txHash,
+      };
+    });
+  }
+  activateSecondaryWallet(primaryWallet, txHash = "") {
+    return this.transaction(() => {
+      const p = primaryWallet.toLowerCase();
+      const now = Date.now();
+      const existing = this.getSecondaryWallet(p);
+      if (!existing || !existing.secondary_wallet) {
+        throw new Error("No secondary backup wallet found for this user");
+      }
+      const s = existing.secondary_wallet.toLowerCase();
+
+      this.db
+        .prepare(
+          "UPDATE secondary_wallets SET status='ACTIVE', updated_at=? WHERE primary_wallet=?"
+        )
+        .run(now, p);
+
+      this.event({
+        id: `sec_act:${p}:${now}:prim`,
+        user: p,
+        txHash: txHash || "",
+        type: "SecondaryWalletActivated",
+        block: 0,
+        data: {
+          primaryWallet: p,
+          secondaryWallet: s,
+          role: "PRIMARY_WALLET",
+          status: "ACTIVE",
+          txHash: txHash || "",
+          timestamp: now,
+        },
+      });
+
+      this.event({
+        id: `sec_act:${s}:${now}:sec`,
+        user: s,
+        txHash: txHash || "",
+        type: "SecondaryWalletActivated",
+        block: 0,
+        data: {
+          primaryWallet: p,
+          secondaryWallet: s,
+          role: "SECONDARY_WALLET",
+          status: "ACTIVE",
+          txHash: txHash || "",
+          timestamp: now,
+        },
+      });
+
+      // Automatically pause primary wallet upon secondary wallet activation
+      const pauseReason = "Automatically paused upon secondary wallet activation";
+      this.db
+        .prepare(
+          `INSERT INTO paused_wallets (wallet, is_paused, reason, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(wallet) DO UPDATE SET is_paused=excluded.is_paused, reason=excluded.reason, updated_at=excluded.updated_at`
+        )
+        .run(p, 1, pauseReason, now);
+
+      this.db
+        .prepare("UPDATE deposits SET recipient=?, updated=? WHERE recipient=?")
+        .run(s, now, p);
+
+      this.db
+        .prepare("UPDATE events SET user=? WHERE user=?")
+        .run(s, p);
+
+      const repId = `${p}:${s}:${now}`;
+      this.db
+        .prepare(
+          "INSERT OR IGNORE INTO wallet_replacements (id, old_wallet, new_wallet, packages_migrated, tx_hash, timestamp) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .run(repId, p, s, 0, txHash, now);
+
+      this.event({
+        id: `pause:${p}:${now}`,
+        user: p,
+        txHash: txHash || "",
+        type: "WalletPaused",
+        block: 0,
+        data: {
+          wallet: p,
+          primaryWallet: p,
+          isPaused: true,
+          reason: pauseReason,
+          txHash: txHash || "",
+          timestamp: now,
+        },
+      });
+
+      return {
+        primary_wallet: p,
+        secondary_wallet: s,
+        status: "ACTIVE",
+        is_paused: true,
         updated_at: now,
         txHash,
       };
@@ -316,6 +425,15 @@ export class Store {
           "UPDATE secondary_wallets SET status='REPLACED', updated_at=? WHERE primary_wallet=?"
         )
         .run(now, oldW);
+
+      // Permanently pause replaced old wallet
+      this.db
+        .prepare(
+          `INSERT INTO paused_wallets (wallet, is_paused, reason, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(wallet) DO UPDATE SET is_paused=excluded.is_paused, reason=excluded.reason, updated_at=excluded.updated_at`
+        )
+        .run(oldW, 1, "Permanently frozen following wallet replacement", now);
 
       this.db
         .prepare("UPDATE deposits SET recipient=?, updated=? WHERE recipient=?")

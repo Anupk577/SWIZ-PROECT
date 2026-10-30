@@ -102,6 +102,23 @@ describe("SOW fixed supply, custody, pricing and packages", () => {
         .purchase(1n, 1n, (await networkHelpers.time.latest()) + 60)
     ).revert(ethers);
   });
+  it("records offline sales in batch atomically and creates separate packages", async () => {
+    const { sz, alice, bob } = await fixture();
+    const now = await networkHelpers.time.latest();
+    const s1 = sale(alice.address, 100n * U, now);
+    const s2 = {
+      ...sale(bob.address, 200n * U, now),
+      referenceId: ethers.id("ref-bob-batch"),
+    };
+    const tx = await sz.recordOfflineSalesBatch([s1, s2]);
+    await tx.wait();
+    expect(await sz.totalStakingPackages()).eq(2);
+    expect((await sz.packages(1)).owner).eq(alice.address);
+    expect((await sz.packages(2)).owner).eq(bob.address);
+    expect((await sz.packages(1)).amount).eq(100n * U);
+    expect((await sz.packages(2)).amount).eq(200n * U);
+    await expect(sz.recordOfflineSalesBatch([])).revert(ethers);
+  });
 });
 describe("SOW automatic FIFO and partial buybacks", () => {
   it("retains immature positions then pays Year 1 and creates a new buyer package", async () => {
@@ -121,7 +138,7 @@ describe("SOW automatic FIFO and partial buybacks", () => {
     expect((await sz.getUserPackageIds(bob.address)).length).eq(2);
   });
   it("tracks partial quantity once and never overpays a tranche", async () => {
-    const { sz, usdt, alice, bob, mint } = await fixture();
+    const { sz, usdt, et, alice, bob, mint } = await fixture();
     const now = await networkHelpers.time.latest();
     await sz.recordOfflineSale(sale(alice.address, 100n * U, now));
     await networkHelpers.time.increase(YEAR + 1);
@@ -131,8 +148,12 @@ describe("SOW automatic FIFO and partial buybacks", () => {
         .connect(bob)
         .purchase(a * U, a * U, (await networkHelpers.time.latest()) + 60);
     }
-    expect(await usdt.balanceOf(alice.address)).eq(5n * U);
+    // Tranche 0 (Year 1, 5 SZ) fills completely: 100% USDT = 5 USDT.
+    // Tranche 1 (Year 2, 1 SZ) fills partially: 100% ET (1 ET) to Alice, 100% USDT (1 USDT) to Treasury.
+    expect(await usdt.balanceOf(alice.address)).eq(5000000n);
+    expect(await et.balanceOf(alice.address)).eq(1000000n);
     expect((await sz.getUnlockSchedule(1))[0].boughtBack).eq(5n * U);
+    expect((await sz.getUnlockSchedule(1))[1].boughtBack).eq(1n * U);
   });
   it("matches globally by earliest unlock timestamp", async () => {
     const { sz, usdt, alice, bob, mint } = await fixture();
@@ -148,7 +169,7 @@ describe("SOW automatic FIFO and partial buybacks", () => {
     expect(await usdt.balanceOf(alice.address)).eq(5n * U);
     expect(await usdt.balanceOf(bob.address)).eq(5n * U);
   });
-  it("mints Year 2 ET atomically and routes USDT to treasury", async () => {
+  it("distributes Year 2 100% ET to staker and 100% USDT to treasury", async () => {
     const { sz, usdt, et, treasury, alice, bob, mint } = await fixture();
     const now = await networkHelpers.time.latest();
     await sz.recordOfflineSale(sale(alice.address, 100n * U, now));
@@ -157,10 +178,13 @@ describe("SOW automatic FIFO and partial buybacks", () => {
     await sz
       .connect(bob)
       .purchase(10n * U, 10n * U, (await networkHelpers.time.latest()) + 60);
-    expect(await usdt.balanceOf(alice.address)).eq(5n * U);
-    expect(await et.balanceOf(alice.address)).eq(5n * U);
-    expect(await usdt.balanceOf(treasury.address)).eq(5n * U);
-    expect((await sz.packages(1)).etReceived).eq(5n * U);
+    // Tranche 0 (Year 1, 5 SZ): 100% USDT (5 USDT) to Alice
+    // Tranche 1 (Year 2, 5 SZ): 100% ET (5 ET) to Alice, 100% USDT (5 USDT) to Treasury
+    expect(await usdt.balanceOf(alice.address)).eq(5000000n);
+    expect(await et.balanceOf(alice.address)).eq(5000000n);
+    expect(await usdt.balanceOf(treasury.address)).eq(5000000n);
+    expect((await sz.packages(1)).usdtReceived).eq(5000000n);
+    expect((await sz.packages(1)).etReceived).eq(5000000n);
   });
 });
 describe("SOW administrator, migration and emergency controls", () => {

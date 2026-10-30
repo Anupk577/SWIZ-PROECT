@@ -3,11 +3,10 @@ import { useUiData as useWeb3 } from "../hooks/useUiData";
 import {
   TrendingUp,
   Layers,
-  DollarSign,
   Repeat,
-  ArrowUpRight,
   ShieldCheck,
 } from "lucide-react";
+
 export const HeroStats: React.FC = () => {
   const { protocolStats, walletState, ready } = useWeb3();
   const actualPackagesCount = protocolStats.totalStakingPackages;
@@ -16,182 +15,126 @@ export const HeroStats: React.FC = () => {
     Math.floor(actualPackagesCount / 1000) +
     Math.floor(currentStakedUsd / 100000);
   const displayPriceNum = Number(protocolStats.currentPriceUSD) / 1e6;
-  const pkgProgress = (actualPackagesCount % 1000) / 10,
-    usdProgress = (currentStakedUsd % 100000) / 1000;
+  const pkgProgress = (actualPackagesCount % 1000) / 10;
+
   const formatUSD = (n: number) =>
     ready
       ? new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 4,
-      }).format(n)
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 4,
+        }).format(n)
       : "—";
+
   const formatTokens = (n: bigint) =>
     ready && walletState.isConnected
       ? (Number(n) / 1e6).toLocaleString(undefined, {
-        maximumFractionDigits: 6,
-      })
+          maximumFractionDigits: 6,
+        })
       : "—";
+
   return (
     <div className="w-full space-y-6">
-      {/* Top Protocol Announcement Bar (Liquid Glass Red) */}
-      <div className="relative overflow-hidden lumix-card rounded-3xl p-6">
+      {/* Top Protocol Announcement Bar */}
+      <div className="relative overflow-hidden lumix-card rounded-3xl p-6 sm:p-8">
+        <div className="page-num mb-3">[METRICS // BENCHMARKS]</div>
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="space-y-2 text-center md:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#E3262E]/15 border border-[#E3262E]/30 rounded-full text-xs font-semibold text-[#E3262E]">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Algorithmic Dynamic Pricing Protocol</span>
+          <div className="space-y-3 text-center md:text-left">
+            <div className="label">
+              DYNAMIC BENCHMARK PROTOCOL
             </div>
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
-              Swiz Smart Ecosystem
+            <h1 className="d-md text-[var(--ink)] font-bold">
+              Swizcoin Protocol Benchmarks
             </h1>
-            <p className="text-gray-300 text-sm max-w-xl">
-              Automated 20-year progressive staking, dynamic compounding formula
+            <div className="rule" />
+            <p className="text-[var(--mid)] text-sm sm:text-base max-w-xl font-body leading-relaxed font-medium">
+              Automated 20-year progressive unlock schedule, dynamic compounding formula
               (+2.33% per step), and automatic FIFO buyback eligibility.
             </p>
           </div>
 
-          {/* Live Price Widget (Liquid Glass Box) */}
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-4 liquid-glass-box p-4 rounded-2xl border border-white/10 min-w-[260px]">
-              <div className="p-3 bg-[#E3262E] text-white rounded-xl">
-                <TrendingUp className="w-6 h-6" />
+          {/* Live Price Widget */}
+          <div className="flex flex-col items-end gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-4 liquid-glass-box p-5 rounded-2xl border border-[var(--border)] min-w-[280px] w-full md:w-auto justify-between shadow-sm">
+              <div className="p-3.5 bg-[#8B1A1A] text-white rounded-xl shadow-md">
+                <TrendingUp className="w-7 h-7" />
               </div>
-              <div>
-                <div className="text-xs text-gray-400 font-medium">
-                  Protocol Reference Price
-                </div>
-                <div className="text-2xl font-black text-white tracking-wide font-mono">
+              <div className="text-right space-y-0.5">
+                <span className="text-xs sm:text-sm font-cond font-bold uppercase tracking-wider text-[var(--mid)] block">
+                  Reference Price
+                </span>
+                <span className="text-2xl sm:text-3xl font-extrabold font-mono text-[#8B1A1A] block">
                   {formatUSD(displayPriceNum)}
-                </div>
-                <div className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
-                  <ArrowUpRight className="w-3 h-3" />
-                  <span>
-                    +2.33% / Step ({ready ? totalSteps : "—"} Steps Total)
-                  </span>
-                </div>
+                </span>
+                <span className="text-xs sm:text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 block">
+                  Step {totalSteps} (+{(totalSteps * 2.33).toFixed(2)}%)
+                </span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4-Card Protocol Metrics Grid (Liquid Glass) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="lumix-card hover:border-white/20 rounded-3xl p-5 transition-all">
-          <div className="flex items-center justify-between text-gray-400 mb-3">
-            <span className="text-xs font-medium">Total Staking Packages</span>
-            <div className="p-2 bg-[#E3262E]/10 rounded-lg text-[#E3262E]">
-              <Layers className="w-4 h-4" />
-            </div>
+      {/* 3 Live Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {/* Metric 1 */}
+        <div className="lumix-card rounded-2xl p-6 space-y-3">
+          <div className="flex items-center justify-between text-sm font-cond font-bold uppercase tracking-wider text-[var(--mid)]">
+            <span>Protocol Staked</span>
+            <Layers className="w-5 h-5 text-[#8B1A1A]" />
           </div>
-          <div className="text-2xl font-black text-white mb-1 font-mono">
-            {ready ? actualPackagesCount.toLocaleString() : "—"}
+          <div className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)] font-mono">
+            {ready
+              ? `$${(Number(protocolStats.totalStakedAmountUSD) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+              : "—"}{" "}
+            <span className="text-sm font-normal text-[var(--muted)]">USD</span>
           </div>
-          <div className="text-xs text-gray-400">Packages created on-chain</div>
-        </div>
-
-        <div className="lumix-card hover:border-white/20 rounded-3xl p-5 transition-all">
-          <div className="flex items-center justify-between text-gray-400 mb-3">
-            <span className="text-xs font-medium">
-              Cumulative Purchase Value
-            </span>
-            <div className="p-2 bg-[#E3262E]/10 rounded-lg text-[#E3262E]">
-              <DollarSign className="w-4 h-4" />
-            </div>
+          <div className="text-xs sm:text-sm font-mono font-medium text-[var(--mid)]">
+            Packages: {actualPackagesCount} / 1,000 threshold
           </div>
-          <div className="text-2xl font-black text-white mb-1 font-mono">
-            {formatUSD(currentStakedUsd)}
-          </div>
-          <div className="text-xs text-gray-400">
-            Cumulative volume in protocol
+          <div className="w-full bg-[var(--bg-card-sub)] rounded-full h-2 overflow-hidden border border-[var(--border)]">
+            <div
+              className="bg-[#8B1A1A] h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(pkgProgress, 100)}%` }}
+            />
           </div>
         </div>
 
-        <div className="lumix-card hover:border-white/20 rounded-3xl p-5 transition-all">
-          <div className="flex items-center justify-between text-gray-400 mb-3">
-            <span className="text-xs font-medium">Buyback Queue Depth</span>
-            <div className="p-2 bg-[#E3262E]/10 rounded-lg text-[#E3262E]">
-              <Repeat className="w-4 h-4" />
-            </div>
+        {/* Metric 2: FIFO Queue Status */}
+        <div className="lumix-card rounded-2xl p-6 space-y-3">
+          <div className="flex items-center justify-between text-sm font-cond font-bold uppercase tracking-wider text-[var(--mid)]">
+            <span>FIFO Queue Status</span>
+            <Repeat className="w-5 h-5 text-[#8B1A1A]" />
           </div>
-          <div className="text-2xl font-black text-white mb-1 font-mono">
-            {ready ? protocolStats.buybackQueueLength : "—"}{" "}
-            {protocolStats.buybackQueueLength === 1 ? "pkg" : "pkgs"}
+          <div className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)] font-mono">
+            {protocolStats.buybackQueueLength > 0 ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold">Active</span>
+            ) : (
+              <span className="text-[var(--ink)]">Treasury</span>
+            )}
           </div>
-          <div className="text-xs text-emerald-400 font-medium">
-            Includes future scheduled tranches
-          </div>
-        </div>
-
-        <div className="lumix-card hover:border-white/20 rounded-3xl p-5 transition-all">
-          <div className="flex items-center justify-between text-gray-400 mb-3">
-            <span className="text-xs font-medium">Your Swiz / ET Balance</span>
-            <div className="p-2 bg-[#E3262E] rounded-lg text-white">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-white mb-1 flex items-baseline gap-2 font-mono">
-            <span>{formatTokens(walletState.szBalance)} Swiz</span>
-          </div>
-          <div className="text-xs text-[#E3262E] font-medium">
-            + {formatTokens(walletState.etBalance)} ET Ecosystem Tokens
-          </div>
-        </div>
-      </div>
-
-      {/* Progress Bar (Liquid Glass) */}
-      <div className="lumix-card rounded-3xl p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-          <div>
-            <span className="text-sm font-semibold text-white">
-              Next Price Step (+2.33%) Progress
-            </span>
-            <p className="text-xs text-gray-400">
-              Both package and purchase-value thresholds contribute price steps
-            </p>
-          </div>
-          <div className="text-xs font-mono font-semibold text-[#E3262E]">
-            Total Compounded Steps: {ready ? totalSteps : "—"}
+          <div className="text-xs sm:text-sm font-mono font-medium text-[var(--mid)]">
+            {protocolStats.buybackQueueLength > 0
+              ? `${protocolStats.buybackQueueLength} tranches waiting`
+              : "Direct treasury backing route"}
           </div>
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <div className="flex justify-between text-xs text-gray-400 mb-1 font-mono">
-              <span>
-                Packages Progress ({ready ? actualPackagesCount % 1000 : "—"} /
-                1000)
-              </span>
-              <span>{ready ? `${pkgProgress.toFixed(1)}%` : "—"}</span>
-            </div>
-            <div className="w-full h-2.5 liquid-glass-box rounded-full overflow-hidden p-0.5 border border-white/10">
-              <div
-                className="h-full bg-[#E3262E] rounded-full transition-all duration-500"
-                style={{ width: `${pkgProgress}%` }}
-              ></div>
-            </div>
+        {/* Metric 3: Your Balance */}
+        <div className="lumix-card rounded-2xl p-6 space-y-3">
+          <div className="flex items-center justify-between text-sm font-cond font-bold uppercase tracking-wider text-[var(--mid)]">
+            <span>Your Balance</span>
+            <ShieldCheck className="w-5 h-5 text-[#8B1A1A]" />
           </div>
-
-          <div>
-            <div className="flex justify-between text-xs text-gray-400 mb-1 font-mono">
-              <span>
-                Purchase Value ($
-                {ready
-                  ? (currentStakedUsd % 100000).toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })
-                  : "—"}{" "}
-                / $100,000)
-              </span>
-              <span>{ready ? `${usdProgress.toFixed(1)}%` : "—"}</span>
-            </div>
-            <div className="w-full h-2.5 liquid-glass-box rounded-full overflow-hidden p-0.5 border border-white/10">
-              <div
-                className="h-full bg-[#E3262E] rounded-full transition-all duration-500"
-                style={{ width: `${usdProgress}%` }}
-              ></div>
-            </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)] font-mono">
+            {walletState.isConnected ? (
+              <span>{formatTokens(walletState.usdtBalance)}</span>
+            ) : (
+              <span className="text-base text-[var(--muted)] font-normal">Disconnected</span>
+            )}
+          </div>
+          <div className="text-xs sm:text-sm font-mono font-medium text-[var(--mid)]">
+            USDT.c on {walletState.networkName || "Amoy"}
           </div>
         </div>
       </div>

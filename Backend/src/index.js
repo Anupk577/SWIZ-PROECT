@@ -60,7 +60,7 @@ app.use(
 );
 
 app.use(express.json({ limit: "32kb" }));
-app.use("/api/v1", api({ store, protocol, config, status }));
+app.use("/api/v1", api({ store, protocol, config, status, bridge }));
 app.use((error, req, res, next) => {
   console.error(error.message);
   res.status(503).json({ error: "Chain service unavailable; retry later" });

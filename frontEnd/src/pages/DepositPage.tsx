@@ -1,25 +1,27 @@
 import React from "react";
 import { BridgePanel } from "../components/ProtocolOperations";
-import { Coins, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export const DepositPage: React.FC = () => {
   return (
     <div className="w-full space-y-8 py-4 animate-fade-in relative">
       {/* 1. HERO BANNER */}
-      <div className="relative overflow-hidden lumix-card rounded-3xl p-6 sm:p-10">
+      <div className="relative overflow-hidden lumix-card rounded-3xl p-6 sm:p-10 border border-[var(--border)]">
+        <div className="page-num mb-3">[BRIDGE // COLLATERAL INGESTION]</div>
         <div className="flex flex-col lg:flex-row items-center justify-between gap-6 relative z-10">
           <div className="space-y-3 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#E3262E]/15 border border-[#E3262E]/30 rounded-full text-xs font-black text-[#E3262E] uppercase tracking-wider">
-              <Coins className="w-4 h-4 text-[#E3262E]" />
-              <span>Dedicated Cross-Chain Bridge Module</span>
+            <div className="label">
+              CROSS-CHAIN LIQUIDITY MODULE
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none font-sans">
-              Cross-Chain USDT <span className="text-[#E3262E]">Bridge</span>
+            <h1 className="d-lg text-[var(--ink)] tracking-tight">
+              CROSS-CHAIN USDT <span className="text-[#8B1A1A]">BRIDGE</span>
             </h1>
 
-            <p className="text-gray-300 text-sm sm:text-base max-w-2xl leading-relaxed font-normal">
+            <div className="rule" />
+
+            <p className="text-[var(--mid)] text-sm sm:text-base max-w-2xl leading-relaxed font-body">
               Bridge source USDT from Ethereum, BNB Smart Chain, or Polygon to mint 1:1 destination USDT.c for Swiz staking package purchases.
             </p>
           </div>
@@ -27,52 +29,52 @@ export const DepositPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
             <Link
               to="/buy"
-              className="w-full sm:w-auto px-6 py-3.5 bg-[#E3262E] hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 hover:scale-105"
+              className="btn btn-red w-full sm:w-auto px-7 py-4 text-sm sm:text-base font-bold shadow-md"
             >
               <span>Go to Buy Swiz Tokens</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
         </div>
 
-        {/* 4-Step Process Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-8 mt-6 border-t border-white/10 text-xs">
-          <div className="liquid-glass-box rounded-2xl p-3 flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-[#E3262E] text-white flex items-center justify-center font-black text-xs">1</div>
+        {/* 4-Step Process Bar (Styled like swizcoin.io .journey-steps) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 pt-8 mt-6 border-t border-[var(--border)] text-xs">
+          <div className="liquid-glass-box rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-9 h-9 rounded-xl bg-[#8B1A1A] text-white flex items-center justify-center font-mono font-bold text-sm shrink-0">1</div>
             <div>
-              <div className="font-bold text-white">Bridge USDT</div>
-              <div className="text-[11px] text-gray-400">Source Network</div>
+              <div className="font-cond font-bold uppercase text-sm text-[var(--ink)]">Bridge USDT</div>
+              <div className="text-xs font-mono text-[var(--mid)] font-medium">Source Network</div>
             </div>
           </div>
 
-          <div className="liquid-glass-box rounded-2xl p-3 flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-[#E3262E] text-white flex items-center justify-center font-black text-xs">2</div>
+          <div className="liquid-glass-box rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-9 h-9 rounded-xl bg-[#8B1A1A] text-white flex items-center justify-center font-mono font-bold text-sm shrink-0">2</div>
             <div>
-              <div className="font-bold text-white">Relayer Verification</div>
-              <div className="text-[11px] text-gray-400">Block Confirmations</div>
+              <div className="font-cond font-bold uppercase text-sm text-[var(--ink)]">Verification</div>
+              <div className="text-xs font-mono text-[var(--mid)] font-medium">Confirmations</div>
             </div>
           </div>
 
-          <div className="liquid-glass-box rounded-2xl p-3 flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-[#E3262E] text-white flex items-center justify-center font-black text-xs">3</div>
+          <div className="liquid-glass-box rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-9 h-9 rounded-xl bg-[#8B1A1A] text-white flex items-center justify-center font-mono font-bold text-sm shrink-0">3</div>
             <div>
-              <div className="font-bold text-white">USDT.c Minted</div>
-              <div className="text-[11px] text-gray-400">1:1 Destination Collateral</div>
+              <div className="font-cond font-bold uppercase text-sm text-[var(--ink)]">USDT.c Minted</div>
+              <div className="text-xs font-mono text-[var(--mid)] font-medium">1:1 Collateral</div>
             </div>
           </div>
 
-          <div className="liquid-glass-box rounded-2xl p-3 flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs">4</div>
+          <div className="liquid-glass-box rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-mono font-bold text-sm shrink-0">4</div>
             <div>
-              <div className="font-bold text-white">Purchase Swiz</div>
-              <div className="text-[11px] text-emerald-400">20Y Unlock Package</div>
+              <div className="font-cond font-bold uppercase text-sm text-[var(--ink)]">Purchase Swiz</div>
+              <div className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold">20Y Package</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* 2. BRIDGE PANEL MODULE */}
-      <div className="lumix-card rounded-3xl p-6">
+      <div className="lumix-card rounded-3xl p-6 sm:p-8">
         <BridgePanel all={false} />
       </div>
     </div>

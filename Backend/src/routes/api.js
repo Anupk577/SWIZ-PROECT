@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { jsonSafe, validAddress } from "../protocol.js";
-export function api({ store, protocol, config, status }) {
+import { depositId } from "../bridge.js";
+export function api({ store, protocol, config, status, bridge }) {
   const router = Router();
   const run = (fn) => (req, res, next) =>
     Promise.resolve(fn(req, res)).catch(next);
@@ -70,6 +71,82 @@ export function api({ store, protocol, config, status }) {
       res.json({ deposits: store.deposits(user) });
     })
   );
+  router.post(
+    "/deposits/relay",
+    run(async (req, res) => {
+      const { source, sourceTx, recipient, adapter, nonce, amount } = req.body || {};
+      if (!source || !sourceTx) {
+        return res.status(400).json({ error: "Missing source or sourceTx" });
+      }
+
+      const sChainId = Number(source);
+      const s = config.sources.find((x) => x.chainId === sChainId);
+      const effectiveAdapter = adapter || s?.adapter;
+      if (!effectiveAdapter) {
+        return res.status(400).json({ error: "Source adapter not configured" });
+      }
+
+      const effectiveNonce = BigInt(nonce || 1);
+      const effectiveAmount = BigInt(amount || 0);
+      const dId = depositId(sChainId, effectiveAdapter, effectiveNonce);
+
+      if (bridge?.wrapper) {
+        try {
+          const processed = await bridge.wrapper.isDepositProcessed(dId);
+          if (processed) {
+            return res.json({
+              success: true,
+              alreadyProcessed: true,
+              message: "Deposit already processed on Polygon Amoy wrapper",
+            });
+          }
+        } catch (checkErr) {
+          console.warn("Could not check isDepositProcessed:", checkErr?.message);
+        }
+      }
+
+      if (!bridge?.canMint) {
+        return res.status(503).json({
+          error: "Bridge relayer key not configured on backend service",
+        });
+      }
+
+      try {
+        const tx = await bridge.wrapper.mintDeposit(
+          recipient,
+          effectiveAmount,
+          BigInt(sChainId),
+          effectiveAdapter,
+          effectiveNonce,
+          sourceTx
+        );
+        const receipt = await tx.wait();
+
+        store.deposit({
+          id: dId,
+          source: sChainId,
+          nonce: effectiveNonce.toString(),
+          recipient,
+          amount: effectiveAmount.toString(),
+          sourceTx,
+          blockHash: receipt.blockHash,
+          blockNumber: receipt.blockNumber,
+        });
+        store.update(dId, "MINTED", receipt.hash);
+
+        return res.json({
+          success: true,
+          mintTx: receipt.hash,
+          message: "Deposit successfully minted by bridge relayer",
+        });
+      } catch (mintErr) {
+        console.error("Relayer mint error:", mintErr);
+        return res.status(500).json({
+          error: mintErr?.reason || mintErr?.message || "Relayer mint transaction failed",
+        });
+      }
+    })
+  );
   router.get(
     "/user/secondary-wallet/:wallet",
     run(async (req, res) => {
@@ -87,14 +164,33 @@ export function api({ store, protocol, config, status }) {
         }
       } catch {}
       const secondaryWallet = record?.secondary_wallet || onChainSecondary || null;
+      const isSecondaryFor = store.getPrimaryForSecondaryWallet(wallet);
       const isLocked = Boolean(secondaryWallet);
+      const isSecondaryWallet = Boolean(isSecondaryFor);
+
+      const replacements = store.getWalletReplacements(wallet);
+      const hasReplacementRecord = replacements.some(
+        (r) => r.old_wallet === wallet.toLowerCase()
+      );
+      const effectiveStatus = record?.status || (onChainSecondary ? "ACTIVE" : "UNSET");
+      const isReplaced = effectiveStatus === "REPLACED" || hasReplacementRecord;
+      const isMigrated = isReplaced || (effectiveStatus === "ACTIVE" && Boolean(secondaryWallet));
+      const migratedTo = isMigrated ? secondaryWallet : null;
+      const isPaused = store.isWalletPaused(wallet);
+
       res.json({
         primaryWallet: wallet,
         secondaryWallet,
-        status: record?.status || (onChainSecondary ? "ACTIVE" : "UNSET"),
+        status: effectiveStatus,
         onChainSecondaryWallet: onChainSecondary,
         isLocked,
         canUpdate: !isLocked,
+        isSecondaryWallet,
+        primaryForThisSecondary: isSecondaryFor?.primary_wallet || null,
+        isReplaced: Boolean(isReplaced),
+        isMigrated: Boolean(isMigrated),
+        migratedTo,
+        isPaused: Boolean(isPaused),
         createdAt: record?.created_at || null,
         updatedAt: record?.updated_at || null,
       });
@@ -132,10 +228,30 @@ export function api({ store, protocol, config, status }) {
             "Secondary wallet is already configured. Every user can only set their secondary wallet once; once set, it cannot be updated.",
         });
       }
-      const record = store.setSecondaryWallet(primaryWallet, secondaryWallet);
+      const record = store.setSecondaryWallet(primaryWallet, secondaryWallet, "PENDING_ACTIVATION");
       res.json({
         success: true,
-        message: "Secondary wallet configured successfully in database",
+        message: "Secondary wallet configured successfully in database, awaiting admin activation",
+        ...record,
+      });
+    })
+  );
+  router.post(
+    "/admin/activate-secondary-wallet",
+    run(async (req, res) => {
+      const primaryWallet = req.body?.primaryWallet?.trim();
+      const txHash = req.body?.txHash?.trim() || "";
+      if (!validAddress(primaryWallet)) {
+        return res.status(400).json({ error: "Invalid primary wallet address" });
+      }
+      const existing = store.getSecondaryWallet(primaryWallet);
+      if (!existing || !existing.secondary_wallet) {
+        return res.status(404).json({ error: "No secondary backup wallet found for this user" });
+      }
+      const record = store.activateSecondaryWallet(primaryWallet, txHash);
+      res.json({
+        success: true,
+        message: "Secondary backup wallet activated successfully",
         ...record,
       });
     })
@@ -288,6 +404,28 @@ export function api({ store, protocol, config, status }) {
       res.json({
         success: true,
         message: "Secondary wallet updated successfully by administrator",
+        ...record,
+      });
+    })
+  );
+  router.post(
+    "/admin/activate-secondary-wallet",
+    run((req, res) => {
+      const primaryWallet = req.body?.primaryWallet?.trim();
+      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.slice(0, 100) : "";
+      if (!validAddress(primaryWallet)) {
+        return res.status(400).json({ error: "Invalid primary wallet address" });
+      }
+      const existing = store.getSecondaryWallet(primaryWallet);
+      if (!existing || !existing.secondary_wallet) {
+        return res.status(400).json({
+          error: "Cannot activate secondary wallet: User has not recorded a secondary wallet.",
+        });
+      }
+      const record = store.activateSecondaryWallet(primaryWallet, txHash);
+      res.json({
+        success: true,
+        message: "Secondary backup wallet activated and primary wallet automatically paused successfully",
         ...record,
       });
     })

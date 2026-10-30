@@ -11,10 +11,12 @@ import {
 } from "lucide-react";
 import { useUiData } from "../hooks/useUiData";
 import { formatUnits } from "ethers";
+
 export function StakingPackagesSection() {
-  const { userPackages, ready } = useUiData();
-  const [selected, setSelected] = useState<number | null>(null),
-    [filter, setFilter] = useState("all");
+  const { userPackages, ready, isWalletMigrated, migratedToWallet, secondaryWallet } = useUiData();
+  const [selected, setSelected] = useState<number | null>(null);
+  const [filter, setFilter] = useState("all");
+
   const rows = userPackages.filter((p) =>
     filter === "active"
       ? !p.isFullyBoughtBack
@@ -24,26 +26,29 @@ export function StakingPackagesSection() {
       ? p.isFullyBoughtBack
       : true
   );
+
   const counts = [
     userPackages.length,
     userPackages.filter((p) => !p.isFullyBoughtBack).length,
     userPackages.filter((p) => p.isUnstakedForBuyback).length,
     userPackages.filter((p) => p.isFullyBoughtBack).length,
   ];
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
         <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
-            <Layers className="w-6 h-6 text-[#E3262E]" />
+          <div className="label mb-1">STAKED ASSETS</div>
+          <h2 className="d-md text-[var(--ink)] flex items-center gap-2">
+            <Layers className="w-5 h-5 text-[#8B1A1A]" />
             My Staking Packages
           </h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-sm text-[var(--mid)] mt-1 font-body font-medium">
             5% annual tranches. Unlocked inventory automatically becomes
             eligible for FIFO buybacks.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 p-1.5 liquid-glass-box rounded-2xl">
+        <div className="flex flex-wrap gap-2 p-1.5 liquid-glass-box rounded-xl">
           {[
             ["all", "All"],
             ["active", "Active"],
@@ -53,10 +58,10 @@ export function StakingPackagesSection() {
             <button
               key={key}
               onClick={() => setFilter(key)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all ${
+              className={`px-3.5 py-2 text-xs sm:text-sm font-cond font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                 filter === key
-                  ? "bg-[#E3262E] text-white shadow-lg"
-                  : "text-gray-400 hover:text-white"
+                  ? "bg-[#8B1A1A] text-white shadow-sm"
+                  : "text-[var(--mid)] hover:text-[var(--ink)]"
               }`}
             >
               {title} ({ready ? counts[i] : "—"})
@@ -64,47 +69,67 @@ export function StakingPackagesSection() {
           ))}
         </div>
       </div>
+
       {!ready ? (
-        <div className="liquid-glass rounded-3xl p-8 text-gray-400">
+        <div className="lumix-card rounded-3xl p-8 text-[var(--mid)] font-mono text-sm">
           Package data is unavailable.
         </div>
       ) : rows.length === 0 ? (
-        <div className="liquid-glass rounded-3xl p-12 text-center space-y-5">
-          <Layers className="w-12 h-12 text-[#E3262E] mx-auto" />
-          <h3 className="text-xl font-extrabold">No packages in this view</h3>
-          <Link
-            to="/buy"
-            className="btn-red-outline-lg inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl text-xs font-bold"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            Purchase Swiz
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+        <div className="lumix-card rounded-3xl p-12 text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-[#8B1A1A]/10 border border-[#8B1A1A]/30 flex items-center justify-center text-[#8B1A1A] mx-auto">
+            <Layers className="w-8 h-8" />
+          </div>
+          <h3 className="d-md text-[var(--ink)]">
+            {isWalletMigrated ? "Packages Migrated to Recovery Account" : "No packages in this view"}
+          </h3>
+          <p className="text-sm text-[var(--mid)] font-body max-w-md mx-auto leading-relaxed font-medium">
+            {isWalletMigrated ? (
+              <>
+                All staking packages and FIFO buyback rights for this address were securely transferred to recovery wallet{" "}
+                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold break-all">
+                  {migratedToWallet || secondaryWallet}
+                </span>
+                . Please connect with your recovery wallet to view and manage packages.
+              </>
+            ) : (
+              "Purchase a Swiz 20-year progressive unlock package to begin earning FIFO returns."
+            )}
+          </p>
+          {!isWalletMigrated && (
+            <Link
+              to="/buy"
+              className="btn btn-red px-8 py-4 text-sm sm:text-base font-bold inline-flex"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              <span>Purchase Swiz</span>
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
           {rows.map((p) => (
             <div
               key={p.packageId}
-              className="liquid-glass liquid-card-interactive rounded-3xl p-6 flex flex-col space-y-5 relative min-w-0"
+              className="lumix-card rounded-3xl p-6 flex flex-col space-y-4 relative min-w-0"
             >
-              <div className="flex flex-wrap gap-2 items-center justify-between border-b border-white/10 pb-3">
-                <span className="px-3 py-1 bg-[#E3262E]/20 border border-[#E3262E]/40 text-[#E3262E] text-xs font-extrabold font-mono rounded-xl">
+              <div className="flex flex-wrap gap-2 items-center justify-between border-b border-[var(--border)] pb-3">
+                <span className="px-3 py-1.5 bg-[#8B1A1A]/15 border border-[#8B1A1A]/30 text-[#8B1A1A] dark:text-red-400 text-sm font-bold font-mono rounded-lg">
                   Pkg #{p.packageId}
                 </span>
                 <span
-                  className={`inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border ${
+                  className={`inline-flex items-center gap-1.5 text-xs font-cond font-bold uppercase tracking-wider px-3 py-1 rounded-lg border ${
                     p.isFullyBoughtBack
-                      ? "text-purple-300 bg-purple-500/20 border-purple-500/30"
+                      ? "text-purple-600 dark:text-purple-300 bg-purple-500/10 border-purple-500/30"
                       : p.isUnstakedForBuyback
-                      ? "text-emerald-400 bg-emerald-500/20 border-emerald-500/30"
-                      : "text-blue-400 bg-blue-500/20 border-blue-500/30"
+                      ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                      : "text-blue-600 dark:text-blue-300 bg-blue-500/10 border-blue-500/30"
                   }`}
                 >
                   {p.isFullyBoughtBack ? (
-                    <CheckCircle2 className="w-3 h-3" />
+                    <CheckCircle2 className="w-3.5 h-3.5" />
                   ) : (
-                    <Repeat className="w-3 h-3" />
+                    <Repeat className="w-3.5 h-3.5" />
                   )}
                   {p.isFullyBoughtBack
                     ? "Bought Back"
@@ -113,7 +138,8 @@ export function StakingPackagesSection() {
                     : "Active 20Y"}
                 </span>
               </div>
-              <div className="liquid-glass-box rounded-2xl p-4 space-y-3 font-mono text-xs">
+
+              <div className="liquid-glass-box rounded-2xl p-5 space-y-3 font-mono text-xs sm:text-sm">
                 {[
                   [
                     "Original Purchase",
@@ -126,57 +152,60 @@ export function StakingPackagesSection() {
                   ["ET Received", formatUnits(p.etReceived, 6)],
                 ].map(([label, value]) => (
                   <div key={label} className="flex gap-3 justify-between">
-                    <span className="text-gray-400">{label}</span>
-                    <span className="text-white text-right break-all">
+                    <span className="text-[var(--mid)] font-medium">{label}</span>
+                    <span className="text-[var(--ink)] font-bold text-right break-all">
                       {value}
                     </span>
                   </div>
                 ))}
               </div>
-              <p className="text-[11px] text-gray-400">
+
+              <p className="text-xs font-mono text-[var(--mid)] font-medium">
                 Start:{" "}
                 {new Date(p.stakingTimestamp * 1000).toLocaleDateString()} ·{" "}
                 {p.isOffline ? "Offline sale" : "Online purchase"}
               </p>
+
               <button
                 onClick={() =>
                   setSelected(selected === p.packageId ? null : p.packageId)
                 }
                 aria-expanded={selected === p.packageId}
-                className="btn-red-outline-lg py-3 text-xs font-bold rounded-xl"
+                className="btn btn-ink py-3 text-xs sm:text-sm font-cond font-bold uppercase tracking-wider"
               >
                 {selected === p.packageId ? "Hide" : "View"} 20-Year Schedule
               </button>
+
               {selected === p.packageId && (
                 <div
-                  className="space-y-2 max-h-80 overflow-y-auto"
+                  className="space-y-2.5 max-h-80 overflow-y-auto custom-scrollbar"
                   aria-label={`Package ${p.packageId} schedule`}
                 >
                   {p.schedule.map((s, i) => (
                     <div
                       key={i}
-                      className="liquid-glass-box rounded-lg p-3 text-[11px] space-y-1"
+                      className="liquid-glass-box rounded-xl p-3.5 text-xs space-y-1.5 font-mono"
                     >
                       <div className="flex justify-between items-center">
-                        <span className="flex gap-1 items-center">
+                        <span className="flex gap-1.5 items-center font-bold text-[var(--ink)]">
                           {s.status === 0 ? (
-                            <Lock className="w-3 h-3 text-gray-500" />
+                            <Lock className="w-3.5 h-3.5 text-[var(--muted)]" />
                           ) : (
-                            <Unlock className="w-3 h-3 text-emerald-400" />
+                            <Unlock className="w-3.5 h-3.5 text-emerald-500" />
                           )}
                           Year {i + 1}
                         </span>
-                        <span>
+                        <span className="text-[var(--mid)] font-medium">
                           {new Date(
                             Number(s.unlockTimestamp) * 1000
                           ).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-gray-400">
+                      <p className="text-[var(--mid)] font-medium">
                         {formatUnits(s.quantity, 6)} Swiz · Filled{" "}
                         {formatUnits(s.boughtBack, 6)} Swiz
                       </p>
-                      <p className="text-emerald-400">
+                      <p className="text-emerald-600 dark:text-emerald-400 font-bold">
                         {
                           ["Locked", "Eligible for buyback", "Bought back"][
                             s.status

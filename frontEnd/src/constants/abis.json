@@ -1590,6 +1590,62 @@
     {
       "inputs": [
         {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "buyer",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "value",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "price",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "purchasedAt",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "startedAt",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "referenceId",
+              "type": "bytes32"
+            }
+          ],
+          "internalType": "struct SZToken.Sale[]",
+          "name": "sales",
+          "type": "tuple[]"
+        }
+      ],
+      "name": "recordOfflineSalesBatch",
+      "outputs": [
+        {
+          "internalType": "uint256[]",
+          "name": "ids",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "bytes32",
           "name": "",
           "type": "bytes32"

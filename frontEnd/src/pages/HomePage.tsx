@@ -1,22 +1,20 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ShieldCheck,
   TrendingUp,
   Repeat,
   ArrowRight,
   Lock,
   CheckCircle,
-  Activity,
+  ExternalLink,
 } from "lucide-react";
 import { Hero3DCanvas } from "../components/Hero3DCanvas";
 import { ProtocolAnalyticsCharts } from "../components/ProtocolAnalyticsCharts";
 import { useUiData as useWeb3 } from "../hooks/useUiData";
-import { WalletModal } from "../components/WalletModal";
+import { EXPLORER } from "../constants/contracts";
 
 export const HomePage: React.FC = () => {
-  const { protocolStats, walletState, ready } = useWeb3();
-  const [isWalletModalOpen, setIsWalletModalOpen] = useState<boolean>(false);
+  const { protocolStats, walletState, ready, connectWallet } = useWeb3();
   const [calcUsdt, setCalcUsdt] = useState<number>(5000);
   const [calcYears, setCalcYears] = useState<number>(5);
 
@@ -28,140 +26,224 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="w-full space-y-16 py-4 animate-fade-in relative">
-      {/* 1. HERO BANNER SECTION */}
-      <div className="relative overflow-hidden lumix-card rounded-3xl p-6 sm:p-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
-          {/* Left Column: Hero Copy & CTA */}
-          <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#E3262E]/15 border border-[#E3262E]/30 rounded-full text-xs font-black text-[#E3262E] uppercase tracking-wider">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Algorithmic Dynamic Pricing & 20Y Staking Protocol</span>
-            </div>
+      {/* 1. HERO BANNER SECTION (MATCHING SWIZCOIN.IO HERO) */}
+      <div className="relative lumix-card rounded-3xl overflow-hidden hero-texture border border-[var(--border)]">
+        <div className="hero-glow-orb" />
 
-            <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight leading-none font-sans">
-              A Clear Path With{" "}
-              <span className="text-[#E3262E]">Progressive Unlocks</span>
-            </h1>
+        <div className="relative z-10 p-6 sm:p-12 lg:p-14">
+          <div className="page-num mb-6">
+            <span>[01 // PROTOCOL OVERVIEW]</span>
+          </div>
 
-            <p className="text-gray-300 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 leading-relaxed font-normal">
-              Swiz Smart pioneers a 20-year progressive unlock model with an
-              automated +2.33% compounding reference price per step and
-              automatic FIFO buyback eligibility.
-            </p>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+            {/* Left Column: Hero Copy & CTA */}
+            <div className="lg:col-span-7 space-y-6 text-left">
+              <div className="label">
+                ALGORITHMIC PRICING & 20Y STAKING PROTOCOL
+              </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-4 pt-2 justify-center lg:justify-start">
-              <Link
-                to="/buy"
-                className="w-full sm:w-auto px-8 py-4 bg-[#E3262E] hover:bg-red-700 text-white font-extrabold rounded-2xl transition-all flex items-center justify-center gap-2 hover:scale-105"
-              >
-                <span>Buy Swiz Tokens</span>
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+              <h1 className="d-hero text-[var(--ink)] tracking-tight">
+                A CLEAR PATH WITH{" "}
+                <span className="text-[#8B1A1A] block">PROGRESSIVE UNLOCKS</span>
+              </h1>
 
-              {walletState.isConnected ? (
+              <div className="rule" />
+
+              <p className="text-[var(--mid)] text-base sm:text-lg max-w-xl leading-relaxed font-body font-medium">
+                Swizcoin pioneers a 20-year progressive unlock architecture with an
+                automated +2.33% compounding reference price per step and
+                automatic FIFO buyback eligibility.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
                 <Link
-                  to="/dashboard"
-                  className="w-full sm:w-auto px-8 py-4 liquid-glass-box hover:bg-white/10 text-white font-bold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2 hover:scale-105"
+                  to="/buy"
+                  className="btn btn-red w-full sm:w-auto px-8 py-4 text-base font-bold shadow-md"
                 >
-                  <Lock className="w-5 h-5 text-[#E3262E]" />
-                  <span>View Dashboard</span>
+                  <span>Buy Swiz Tokens</span>
+                  <ArrowRight className="w-5 h-5" />
                 </Link>
-              ) : (
-                <button
-                  onClick={() => setIsWalletModalOpen(true)}
-                  className="w-full sm:w-auto px-8 py-4 liquid-glass-box hover:bg-white/10 text-white font-bold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2 hover:scale-105"
-                >
-                  <span>Connect Web3 Wallet</span>
-                </button>
-              )}
+
+                {walletState.isConnected ? (
+                  <Link
+                    to="/dashboard"
+                    className="btn btn-ink w-full sm:w-auto px-8 py-4 text-base font-bold"
+                  >
+                    <Lock className="w-5 h-5 text-[#8B1A1A]" />
+                    <span>View Dashboard</span>
+                  </Link>
+                ) : (
+                  <button
+                    onClick={connectWallet}
+                    className="btn btn-ink w-full sm:w-auto px-8 py-4 text-base font-bold"
+                  >
+                    <span>Connect Web3 Wallet</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Inline Key Feature Badges */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-6 border-t border-[var(--border)] text-sm sm:text-base font-cond font-bold tracking-wide text-[var(--mid)]">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-[#8B1A1A]" />
+                  <span>+2.33% / Threshold Step</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-[#8B1A1A]" />
+                  <span>20-Year Linear Vesting</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-[#8B1A1A]" />
+                  <span>365-Day Annual Tranches</span>
+                </div>
+              </div>
             </div>
 
-            {/* Feature Pills */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4 border-t border-white/10 text-xs text-gray-300 font-medium">
-              <div className="flex items-center justify-center lg:justify-start gap-1.5">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>+2.33% / Step Price Formula</span>
-              </div>
-              <div className="flex items-center justify-center lg:justify-start gap-1.5">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>20-Year Unlock Tranches</span>
-              </div>
-              <div className="flex items-center justify-center lg:justify-start gap-1.5 col-span-2 sm:col-span-1">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>365-Day Annual Tranches</span>
-              </div>
+            {/* Right Column: 3D Interactive Canvas */}
+            <div className="lg:col-span-5 h-[340px] sm:h-[400px] w-full relative flex items-center justify-center">
+              <Hero3DCanvas />
             </div>
           </div>
 
-          {/* Right Column: 3D Interactive Canvas */}
-          <div className="lg:col-span-5 h-[340px] sm:h-[400px] w-full relative flex items-center justify-center">
-            <Hero3DCanvas />
+          {/* Metrics Row — matching swizcoin.io .hero-metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-10 mt-8 border-t border-[var(--border)]">
+            <div className="space-y-1.5 pr-4 border-r border-[var(--border)]">
+              <div className="font-display text-4xl sm:text-5xl text-[#8B1A1A] leading-none">
+                +2.33%
+              </div>
+              <div className="font-mono text-xs sm:text-sm font-bold tracking-wider uppercase text-[var(--mid)]">
+                Compound Formula / Step
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pr-4 md:border-r border-[var(--border)]">
+              <div className="font-display text-4xl sm:text-5xl text-[var(--ink)] leading-none">
+                20 YRS
+              </div>
+              <div className="font-mono text-xs sm:text-sm font-bold tracking-wider uppercase text-[var(--mid)]">
+                Linear Vesting (5% / Yr)
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pr-4 border-r border-[var(--border)]">
+              <div className="font-display text-4xl sm:text-5xl text-[#8B1A1A] leading-none">
+                FIFO
+              </div>
+              <div className="font-mono text-xs sm:text-sm font-bold tracking-wider uppercase text-[var(--mid)]">
+                Order Matching Engine
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="font-display text-4xl sm:text-5xl text-[var(--ink)] leading-none">
+                100%
+              </div>
+              <div className="font-mono text-xs sm:text-sm font-bold tracking-wider uppercase text-[var(--mid)]">
+                Smart Contract Custody
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Hero Bottom Bar — matching swizcoin.io .hero-bar */}
+        <div className="w-full bg-[#8B1A1A] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 text-sm font-mono tracking-wider uppercase font-semibold">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            <span>SWIZ PROTOCOL ECOSYSTEM • DEPLOYED ON POLYGON AMOY</span>
+          </div>
+          <div className="flex items-center gap-5 font-cond font-bold">
+            <a
+              href={EXPLORER}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:underline flex items-center gap-1.5 text-white underline-offset-4"
+            >
+              <span>Verify Smart Contract</span>
+              <ExternalLink className="w-4 h-4" />
+            </a>
           </div>
         </div>
       </div>
 
       {/* 2. CORE PROTOCOL PILLARS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="lumix-card rounded-3xl p-8 space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#E3262E]/15 border border-[#E3262E]/30 flex items-center justify-center text-[#E3262E]">
-            <TrendingUp className="w-7 h-7" />
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div>
+            <div className="page-num mb-2">[02 // THREE CORE PILLARS]</div>
+            <div className="label">THE ARCHITECTURE</div>
+            <h2 className="d-lg text-[var(--ink)] mt-1 font-bold">
+              BUILT FOR ENDURING APPRECIATION
+            </h2>
           </div>
-          <h3 className="text-xl font-extrabold text-white">
-            Algorithmic Dynamic Pricing
-          </h3>
-          <p className="text-gray-300 text-xs sm:text-sm leading-relaxed">
-            Reference price increases +2.33% compounded every 1,000 packages or
-            $100,000 USD total protocol staking volume.
-          </p>
         </div>
 
-        <div className="lumix-card rounded-3xl p-8 space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#E3262E]/15 border border-[#E3262E]/30 flex items-center justify-center text-[#E3262E]">
-            <Lock className="w-7 h-7" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="lumix-card rounded-3xl p-8 space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#8B1A1A]/10 border border-[#8B1A1A]/30 flex items-center justify-center text-[#8B1A1A]">
+              <TrendingUp className="w-7 h-7" />
+            </div>
+            <h3 className="font-display text-2xl sm:text-3xl uppercase tracking-wide text-[var(--ink)] font-bold">
+              Algorithmic Dynamic Pricing
+            </h3>
+            <div className="rule" />
+            <p className="text-[var(--mid)] text-sm sm:text-base leading-relaxed font-body font-medium">
+              Reference price increases +2.33% compounded every 1,000 packages or
+              $100,000 USD total protocol staking volume.
+            </p>
           </div>
-          <h3 className="text-xl font-extrabold text-white">
-            20-Year Staking Schedule
-          </h3>
-          <p className="text-gray-300 text-xs sm:text-sm leading-relaxed">
-            Staked tokens unlock linearly at 5% per year across 20 annual
-            tranches, with every tranche held in contract custody until bought
-            back.
-          </p>
-        </div>
 
-        <div className="lumix-card rounded-3xl p-8 space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#E3262E]/15 border border-[#E3262E]/30 flex items-center justify-center text-[#E3262E]">
-            <Repeat className="w-7 h-7" />
+          <div className="lumix-card rounded-3xl p-8 space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#8B1A1A]/10 border border-[#8B1A1A]/30 flex items-center justify-center text-[#8B1A1A]">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h3 className="font-display text-2xl sm:text-3xl uppercase tracking-wide text-[var(--ink)] font-bold">
+              20-Year Staking Schedule
+            </h3>
+            <div className="rule" />
+            <p className="text-[var(--mid)] text-sm sm:text-base leading-relaxed font-body font-medium">
+              Staked tokens unlock linearly at 5% per year across 20 annual
+              tranches, with every tranche held in contract custody until bought
+              back.
+            </p>
           </div>
-          <h3 className="text-xl font-extrabold text-white">
-            Automatic FIFO Buybacks
-          </h3>
-          <p className="text-gray-300 text-xs sm:text-sm leading-relaxed">
-            New purchases match eligible tranches in FIFO order. Year 1 pays
-            USDT.c; Years 2–20 issue ET to the original staker.
-          </p>
+
+          <div className="lumix-card rounded-3xl p-8 space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#8B1A1A]/10 border border-[#8B1A1A]/30 flex items-center justify-center text-[#8B1A1A]">
+              <Repeat className="w-7 h-7" />
+            </div>
+            <h3 className="font-display text-2xl sm:text-3xl uppercase tracking-wide text-[var(--ink)] font-bold">
+              Automatic FIFO Buybacks
+            </h3>
+            <div className="rule" />
+            <p className="text-[var(--mid)] text-sm sm:text-base leading-relaxed font-body font-medium">
+              New purchases match eligible tranches in FIFO order. Year 1 pays
+              USDT.c; Years 2–20 issue ET to the original staker.
+            </p>
+          </div>
         </div>
       </div>
 
       {/* 3. INTERACTIVE YIELD CALCULATOR */}
-      <div className="lumix-card rounded-3xl p-8 space-y-6">
-        <div className="space-y-1">
-          <h3 className="text-2xl font-black text-white">
-            Interactive Reference Price Calculator
-          </h3>
-          <p className="text-gray-400 text-xs sm:text-sm">
+      <div className="lumix-card rounded-3xl p-8 sm:p-10 space-y-6">
+        <div>
+          <div className="page-num mb-2">[03 // REFERENCE CALCULATOR]</div>
+          <div className="label">NUMERICAL SIMULATION</div>
+          <h2 className="d-lg text-[var(--ink)] mt-1">
+            DYNAMIC REFERENCE PRICING SIMULATOR
+          </h2>
+          <p className="text-[var(--mid)] text-sm sm:text-base mt-2 max-w-2xl font-body leading-relaxed font-medium">
             Explore the reference-price formula by threshold steps. Steps are
-            driven by package and purchase counters, not elapsed years or
+            driven by package and purchase volume counters, not elapsed years or
             guaranteed returns.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-2">
           <div className="space-y-6">
             <div>
-              <label className="text-xs font-semibold text-gray-300 flex justify-between mb-2">
+              <label className="text-sm font-cond font-bold uppercase tracking-wider text-[var(--ink)] flex justify-between mb-2">
                 <span>USDT.c Purchase Amount</span>
-                <span className="text-[#E3262E] font-bold text-sm">
+                <span className="text-[#8B1A1A] dark:text-red-400 font-mono font-bold text-base">
                   ${calcUsdt.toLocaleString()} USDT.c
                 </span>
               </label>
@@ -172,15 +254,15 @@ export const HomePage: React.FC = () => {
                 step="100"
                 value={calcUsdt}
                 onChange={(e) => setCalcUsdt(Number(e.target.value))}
-                className="w-full accent-[#E3262E]"
+                className="w-full accent-[#8B1A1A] cursor-pointer h-3"
               />
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-300 flex justify-between mb-2">
+              <label className="text-sm font-cond font-bold uppercase tracking-wider text-[var(--ink)] flex justify-between mb-2">
                 <span>Additional Threshold Steps</span>
-                <span className="text-[#E3262E] font-bold text-sm">
-                  {calcYears} Steps
+                <span className="text-[#8B1A1A] dark:text-red-400 font-mono font-bold text-base">
+                  +{calcYears} Steps
                 </span>
               </label>
               <input
@@ -190,31 +272,37 @@ export const HomePage: React.FC = () => {
                 step="1"
                 value={calcYears}
                 onChange={(e) => setCalcYears(Number(e.target.value))}
-                className="w-full accent-[#E3262E]"
+                className="w-full accent-[#8B1A1A] cursor-pointer h-3"
               />
             </div>
           </div>
 
-          <div className="liquid-glass-box rounded-2xl p-6 space-y-3">
-            <div className="text-xs text-gray-400">
-              Initial Swiz Tokens Received:
-            </div>
-            <div className="text-2xl font-mono font-black text-white">
-              {ready ? estimatedSwiz.toFixed(2) : "—"} Swiz
-            </div>
-
-            <div className="text-xs text-gray-400 pt-2 border-t border-white/10">
-              Illustrative Reference Price (+{calcYears} steps):
-            </div>
-            <div className="text-xl font-mono font-black text-emerald-400">
-              ${ready ? estimatedFuturePrice.toFixed(4) : "—"}
+          <div className="liquid-glass-box rounded-2xl p-6 space-y-5">
+            <div>
+              <div className="font-mono text-sm tracking-wider uppercase font-bold text-[var(--muted)]">
+                Initial Swiz Tokens Received:
+              </div>
+              <div className="text-3xl font-mono font-extrabold text-[var(--ink)] mt-1">
+                {ready ? estimatedSwiz.toFixed(2) : "—"} SZ
+              </div>
             </div>
 
-            <div className="text-xs text-gray-400 pt-2 border-t border-white/10">
-              Illustrative Swiz × Reference Price:
+            <div className="pt-4 border-t border-[var(--border)]">
+              <div className="font-mono text-sm tracking-wider uppercase font-bold text-[var(--muted)]">
+                Illustrative Reference Price (+{calcYears} steps):
+              </div>
+              <div className="text-2xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+                ${ready ? estimatedFuturePrice.toFixed(4) : "—"}
+              </div>
             </div>
-            <div className="text-2xl font-mono font-black text-[#E3262E]">
-              ${ready ? estimatedFutureValue.toFixed(2) : "—"}
+
+            <div className="pt-4 border-t border-[var(--border)]">
+              <div className="font-mono text-sm tracking-wider uppercase font-bold text-[var(--muted)]">
+                Illustrative Swiz × Reference Price:
+              </div>
+              <div className="text-3xl font-mono font-extrabold text-[#8B1A1A] dark:text-red-400 mt-1">
+                ${ready ? estimatedFutureValue.toFixed(2) : "—"}
+              </div>
             </div>
           </div>
         </div>
@@ -223,66 +311,68 @@ export const HomePage: React.FC = () => {
       {/* 4. PROTOCOL ANALYTICS CHARTS SECTION */}
       <ProtocolAnalyticsCharts />
 
-      {/* 5. FIFO MATCHING ENGINE */}
-      <div className="lumix-card rounded-3xl p-8 space-y-6 relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#E3262E]/15 border border-[#E3262E]/30 rounded-full text-xs font-bold text-[#E3262E]">
-              <Activity className="w-3.5 h-3.5" />
-              <span>Smart Contract FIFO Engine</span>
-            </div>
-            <h3 className="text-2xl font-black text-white">
-              Live FIFO Order Matching Engine
-            </h3>
+      {/* 5. LIVE FIFO MATCHING ENGINE */}
+      <div className="lumix-card rounded-3xl p-8 sm:p-10 space-y-6 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border)] pb-6">
+          <div>
+            <div className="page-num mb-2">[04 // MATCHING ENGINE]</div>
+            <div className="label">SMART CONTRACT EXECUTION</div>
+            <h2 className="d-lg text-[var(--ink)] mt-1">
+              LIVE FIFO ORDER MATCHING ENGINE
+            </h2>
           </div>
           <Link
             to="/buy"
-            className="px-6 py-3 bg-[#E3262E] hover:bg-red-700 text-white font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:scale-105"
+            className="btn btn-red px-6 py-3.5 text-sm sm:text-base font-bold shrink-0 self-start md:self-auto"
           >
-            <span>Proceed to Buy Tokens Page</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>Proceed to Buy Tokens</span>
+            <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="liquid-glass-box rounded-2xl p-5 space-y-2">
-            <div className="text-xs text-white font-extrabold">
-              1. Eligible Inventory Matching
+          <div className="liquid-glass-box rounded-2xl p-6 space-y-3">
+            <div className="font-mono text-sm font-bold text-[#8B1A1A] dark:text-red-400 uppercase tracking-wider">
+              01 // INVENTORY MATCHING
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed">
+            <h4 className="font-cond font-bold text-lg sm:text-xl uppercase text-[var(--ink)]">
+              Eligible Inventory Priority
+            </h4>
+            <p className="text-sm sm:text-base text-[var(--mid)] leading-relaxed font-body font-medium">
               Purchases use USDT.c and match unlocked Swiz by the earliest
               eligible timestamp, subject to the original staker’s buyback price
               cap.
             </p>
           </div>
 
-          <div className="liquid-glass-box rounded-2xl p-5 space-y-2">
-            <div className="text-xs text-white font-extrabold">
-              2. Treasury Inventory Fallback
+          <div className="liquid-glass-box rounded-2xl p-6 space-y-3">
+            <div className="font-mono text-sm font-bold text-[#8B1A1A] dark:text-red-400 uppercase tracking-wider">
+              02 // TREASURY BACKING
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed">
+            <h4 className="font-cond font-bold text-lg sm:text-xl uppercase text-[var(--ink)]">
+              Treasury Inventory Fallback
+            </h4>
+            <p className="text-sm sm:text-base text-[var(--mid)] leading-relaxed font-body font-medium">
               Unmatched Swiz comes from pre-minted treasury inventory and remains
               locked in contract custody. The corresponding payment goes to the
               company treasury.
             </p>
           </div>
 
-          <div className="liquid-glass-box rounded-2xl p-5 space-y-2">
-            <div className="text-xs text-white font-extrabold">
-              3. 20-Year Supply Security
+          <div className="liquid-glass-box rounded-2xl p-6 space-y-3">
+            <div className="font-mono text-sm font-bold text-[#8B1A1A] dark:text-red-400 uppercase tracking-wider">
+              03 // LINEAR VESTING
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed">
+            <h4 className="font-cond font-bold text-lg sm:text-xl uppercase text-[var(--ink)]">
+              20-Year Supply Security
+            </h4>
+            <p className="text-sm sm:text-base text-[var(--mid)] leading-relaxed font-body font-medium">
               Each package unlocks 5% at successive 365-day intervals. There is
-              no APY, early withdrawal or guaranteed buyback demand.
+              no APY, early withdrawal or artificial inflation.
             </p>
           </div>
         </div>
       </div>
-
-      <WalletModal
-        isOpen={isWalletModalOpen}
-        onClose={() => setIsWalletModalOpen(false)}
-      />
     </div>
   );
 };

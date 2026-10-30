@@ -29,13 +29,15 @@ export class Bridge {
     this.config = config;
     this.store = store;
     this.destination = new JsonRpcProvider(config.rpc);
-    this.canMint = Boolean(signer || process.env.RELAYER_PRIVATE_KEY);
+    const rawKey = process.env.RELAYER_PRIVATE_KEY?.trim();
+    const relayerKey = rawKey ? (rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`) : null;
+    this.canMint = Boolean(signer || relayerKey);
     this.wrapper = new Contract(
       config.wrapper,
       WRAPPER_ABI,
       signer ||
-        (process.env.RELAYER_PRIVATE_KEY
-          ? new Wallet(process.env.RELAYER_PRIVATE_KEY, this.destination)
+        (relayerKey
+          ? new Wallet(relayerKey, this.destination)
           : this.destination)
     );
     this.sources = config.sources.map((s) => ({
@@ -51,36 +53,50 @@ export class Bridge {
     )
       throw Error("Destination chain mismatch");
     for (const s of this.sources) {
-      if (Number((await s.provider.getNetwork()).chainId) !== s.chainId)
-        throw Error("Source chain mismatch");
-      s.contract = new Contract(s.adapter, ADAPTER_ABI, s.provider);
-      const [token, treasury, chain, wrapper, scale, approved] =
-        await Promise.all([
-          s.contract.token(),
-          s.contract.treasury(),
-          s.contract.destinationChainId(),
-          s.contract.destinationWrapper(),
-          s.contract.scale(),
-          this.wrapper.adapters(s.chainId),
-        ]);
-      if (
-        token.toLowerCase() !== s.token.toLowerCase() ||
-        treasury.toLowerCase() !== s.treasury.toLowerCase() ||
-        Number(chain) !== this.config.chainId ||
-        wrapper.toLowerCase() !== this.config.wrapper.toLowerCase() ||
-        approved.toLowerCase() !== s.adapter.toLowerCase()
-      )
-        throw Error("Source adapter configuration mismatch");
-      s.scale = scale;
+      try {
+        if (Number((await s.provider.getNetwork()).chainId) !== s.chainId) {
+          console.warn(`Source chain mismatch for ${s.name || s.chainId} (${s.chainId})`);
+          s.disabled = true;
+          continue;
+        }
+        s.contract = new Contract(s.adapter, ADAPTER_ABI, s.provider);
+        const [token, treasury, chain, wrapper, scale, approved] =
+          await Promise.all([
+            s.contract.token(),
+            s.contract.treasury(),
+            s.contract.destinationChainId(),
+            s.contract.destinationWrapper(),
+            s.contract.scale(),
+            this.wrapper.adapters(s.chainId),
+          ]);
+        if (
+          token.toLowerCase() !== s.token.toLowerCase() ||
+          treasury.toLowerCase() !== s.treasury.toLowerCase() ||
+          Number(chain) !== this.config.chainId ||
+          wrapper.toLowerCase() !== this.config.wrapper.toLowerCase() ||
+          approved.toLowerCase() !== s.adapter.toLowerCase()
+        ) {
+          console.warn(`Source adapter configuration mismatch for ${s.name || s.chainId} (${s.chainId})`);
+          s.disabled = true;
+          continue;
+        }
+        s.scale = scale;
+      } catch (err) {
+        console.warn(`Warning: Could not initialize source ${s.name || s.chainId}:`, err?.message || err);
+        s.disabled = true;
+      }
     }
     this.ready = true;
   }
   async tick() {
     if (!this.ready) await this.initialize();
-    for (const s of this.sources) await this.scan(s);
+    for (const s of this.sources) {
+      if (!s.disabled) await this.scan(s);
+    }
     for (const d of this.store.pending()) await this.process(d);
   }
   async scan(s) {
+    if (s.disabled) return;
     const finalized = (await s.provider.getBlockNumber()) - s.confirmations;
     const from = this.store.cursor(`source:${s.chainId}`, s.startBlock - 1) + 1;
     if (from > finalized) return;

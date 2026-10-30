@@ -30,7 +30,15 @@ export function useUiData() {
       address: v.address ?? null,
       isAdmin: v.isAdmin,
       networkName:
-        CHAIN_ID === 84532 ? "Base Sepolia Testnet" : `Network ${CHAIN_ID}`,
+        CHAIN_ID === 80002
+          ? "Polygon Amoy"
+          : CHAIN_ID === 84532
+          ? "Base Sepolia"
+          : CHAIN_ID === 11155111
+          ? "Ethereum Sepolia"
+          : CHAIN_ID === 97
+          ? "BSC Testnet"
+          : `Network ${CHAIN_ID}`,
       usdtBalance: v.balances?.usdt ?? 0n,
       szBalance: v.balances?.sz ?? 0n,
       etBalance: v.balances?.et ?? 0n,

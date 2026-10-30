@@ -379,6 +379,27 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         id = _create(sale, true, 0, 0, 0);
         emit OfflineRecorded(id, sale.referenceId, false);
     }
+    function recordOfflineSalesBatch(
+        Sale[] calldata sales
+    )
+        external
+        onlyRole(ADMIN_ROLE)
+        whenNotPaused
+        nonReentrant
+        returns (uint256[] memory ids)
+    {
+        uint256 len = sales.length;
+        if (len == 0 || len > 100) revert InvalidInput();
+        ids = new uint256[](len);
+        for (uint256 i = 0; i < len; ++i) {
+            Sale calldata sale = sales[i];
+            _validateSale(sale);
+            if (pausedWallets[sale.buyer]) revert InvalidInput();
+            _inventory(sale.amount);
+            ids[i] = _create(sale, true, 0, 0, 0);
+            emit OfflineRecorded(ids[i], sale.referenceId, false);
+        }
+    }
     // Import previously completed buybacks without minting historical ET again.
     function importHistoricalSale(
         Sale calldata sale,
@@ -548,14 +569,17 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
                 _scheduleNext(head.packageId, head.tranche + 1);
             }
             if (pkg.boughtBack == pkg.amount) activePackages[pkg.owner]--;
+            uint256 usdtAmount;
             uint256 etAmount;
             if (head.tranche == 0) {
+                usdtAmount = value;
                 pkg.usdtReceived += value;
                 usdt.safeTransfer(pkg.owner, value);
             } else {
+                usdtAmount = 0;
                 etAmount = value;
-                pkg.etReceived += value;
-                et.mint(pkg.owner, value);
+                pkg.etReceived += etAmount;
+                et.mint(pkg.owner, etAmount);
                 usdt.safeTransfer(treasury, value);
             }
             emit BuybackExecuted(
@@ -564,7 +588,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
                 pkg.owner,
                 head.tranche,
                 qty,
-                head.tranche == 0 ? value : 0,
+                usdtAmount,
                 etAmount,
                 rate
             );

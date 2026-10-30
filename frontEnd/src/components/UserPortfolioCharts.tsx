@@ -11,28 +11,46 @@ import {
 } from "recharts";
 import { TrendingUp } from "lucide-react";
 import { useWeb3 } from "../context/Web3Context";
+import { useTheme } from "../context/ThemeContext";
+
 export function UserPortfolioCharts() {
-  const { packages } = useWeb3();
+  const { packages, isWalletMigrated } = useWeb3();
+  const { isDark } = useTheme();
   const [tab, setTab] = useState("inventory");
+
   const data = packages.map((p) => ({
     label: `Pkg #${p.id}`,
     remaining: Number(p.amount - p.boughtBack) / 1e6,
     boughtBack: Number(p.boughtBack) / 1e6,
     et: Number(p.etReceived) / 1e6,
   }));
+
+  const gridColor = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
+  const textColor = isDark ? "#A0A09C" : "#7E7E7E";
+  const tooltipStyle = {
+    background: isDark ? "#191919" : "#FFFFFF",
+    border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(0,0,0,0.1)",
+    borderRadius: "10px",
+    color: isDark ? "#F5F4F0" : "#141414",
+    boxShadow: isDark ? "0 8px 24px rgba(0,0,0,0.5)" : "0 8px 24px rgba(0,0,0,0.08)",
+    fontFamily: "var(--cond)",
+  };
+
   return (
-    <div className="liquid-glass rounded-3xl p-6 space-y-6">
+    <div className="lumix-card rounded-3xl p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h3 className="font-black text-xl flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-[#E3262E]" />
+          <div className="label mb-2">PORTFOLIO INTELLIGENCE</div>
+          <h3 className="font-display text-2xl uppercase tracking-wide flex items-center gap-2 text-[var(--ink)]">
+            <TrendingUp className="w-5 h-5 text-[#8B1A1A]" />
             Your Package Analytics
           </h3>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-[var(--mid)] mt-1 font-body">
             Current on-chain quantities and cumulative ET receipts by package.
           </p>
         </div>
-        <div className="flex gap-2 p-1.5 liquid-glass-box rounded-xl">
+
+        <div className="flex gap-1.5 p-1 liquid-glass-box rounded-xl">
           {[
             ["inventory", "Swiz Inventory"],
             ["rewards", "ET Received"],
@@ -40,8 +58,10 @@ export function UserPortfolioCharts() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`px-4 py-2 text-xs font-bold rounded-lg ${
-                tab === key ? "bg-[#E3262E] text-white" : "text-gray-400"
+              className={`px-4 py-2 text-xs font-cond font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                tab === key
+                  ? "bg-[#8B1A1A] text-white shadow-sm"
+                  : "text-[var(--mid)] hover:text-[var(--ink)]"
               }`}
             >
               {label}
@@ -49,35 +69,39 @@ export function UserPortfolioCharts() {
           ))}
         </div>
       </div>
+
       <div className="w-full h-[300px] min-w-0">
         {!data.length ? (
-          <p className="text-gray-400 text-sm py-20 text-center">
-            Your package analytics will appear after a confirmed purchase.
+          <p className="text-[var(--mid)] text-xs font-mono py-20 text-center">
+            {isWalletMigrated
+              ? "No active package inventory. All staking packages were migrated to recovery wallet."
+              : "Your package analytics will appear after a confirmed purchase."}
           </p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="#1F2937"
+                stroke={gridColor}
                 vertical={false}
               />
-              <XAxis dataKey="label" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  background: "#131926",
-                  border: "1px solid #374151",
-                  borderRadius: 12,
-                }}
+              <XAxis
+                dataKey="label"
+                stroke={textColor}
+                tick={{ fontSize: 11, fontFamily: "var(--cond)" }}
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <YAxis
+                stroke={textColor}
+                tick={{ fontSize: 11, fontFamily: "var(--mono)" }}
+              />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: 12, fontFamily: "var(--cond)" }} />
               {tab === "inventory" ? (
                 <>
                   <Bar
                     dataKey="remaining"
                     name="Swiz in custody"
-                    fill="#E3262E"
+                    fill="#8B1A1A"
                     radius={[6, 6, 0, 0]}
                   />
                   <Bar

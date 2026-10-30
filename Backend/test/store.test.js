@@ -37,11 +37,22 @@ test("secondary wallet persistence and offchain wallet replacement migration", (
   const primary = "0x1111111111111111111111111111111111111111";
   const secondary = "0x2222222222222222222222222222222222222222";
 
-  // Register secondary wallet
+  // Register secondary wallet (pending activation)
   s.setSecondaryWallet(primary, secondary);
   const record = s.getSecondaryWallet(primary);
   assert.equal(record.secondary_wallet, secondary.toLowerCase());
-  assert.equal(record.status, "ACTIVE");
+  assert.equal(record.status, "PENDING_ACTIVATION");
+
+  // Admin activates secondary wallet
+  s.activateSecondaryWallet(primary);
+  const activeRecord = s.getSecondaryWallet(primary);
+  assert.equal(activeRecord.status, "ACTIVE");
+
+  // Check reverse lookup
+  const reverse = s.getPrimaryForSecondaryWallet(secondary);
+  assert.equal(reverse.primary_wallet, primary.toLowerCase());
+  assert.equal(reverse.status, "ACTIVE");
+  assert.equal(s.getPrimaryForSecondaryWallet(primary), null);
 
   // Create deposit and event for primary
   s.deposit({
@@ -64,7 +75,7 @@ test("secondary wallet persistence and offchain wallet replacement migration", (
   });
 
   assert.equal(s.deposits(primary).length, 1);
-  assert.equal(s.events(primary).length, 3);
+  assert.equal(s.events(primary).length, 5);
 
   // Execute offchain replacement
   const rep = s.replaceWalletOffchain(primary, secondary, "tx_replace", 1);

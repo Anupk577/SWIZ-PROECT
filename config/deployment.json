@@ -1,10 +1,10 @@
 {
   "chainId": 80002,
   "rpc": "https://polygon-amoy.g.alchemy.com/v2/SkzrI3058h3g92BAFz9fU",
-  "sz": "0xB3E678bAB4152208A3d96dAa164453eC0b4121E9",
-  "et": "0x8a4b3e4bEb44F34F61ce27f861C028eBD292c866",
-  "wrapper": "0x2C74e4FBC2Da0DAE929c7f717Fc921bd81015C68",
-  "startBlock": 48780143,
+  "sz": "0x2cfac91e27B9f9c855D4d8f248Da28Ef54c54d47",
+  "et": "0x32105EF98AD3473036eF614C835a81475E27d06E",
+  "wrapper": "0xAfECBA18585f6C9eb120fD89a56B53243856a4fB",
+  "startBlock": 51195330,
   "confirmations": 1,
   "sources": [
     {
@@ -17,6 +17,28 @@
       "startBlock": 48780143,
       "confirmations": 1,
       "explorer": "https://amoy.polygonscan.com"
+    },
+    {
+      "name": "Ethereum Sepolia Testnet",
+      "chainId": 11155111,
+      "rpc": "https://ethereum-sepolia-rpc.publicnode.com",
+      "adapter": "0x279bF3c4bF4E1eE5A5Afed5d123d0421424e284F",
+      "token": "0x890FadD44588e67e5091147392413F8c67736Ec9",
+      "treasury": "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
+      "startBlock": 6700000,
+      "confirmations": 1,
+      "explorer": "https://sepolia.etherscan.io"
+    },
+    {
+      "name": "BNB Smart Chain Testnet",
+      "chainId": 97,
+      "rpc": "https://bsc-testnet-rpc.publicnode.com",
+      "adapter": "0x279bF3c4bF4E1eE5A5Afed5d123d0421424e284F",
+      "token": "0x890FadD44588e67e5091147392413F8c67736Ec9",
+      "treasury": "0x1Eb5FDFa920aE1E8341288e4F69c698698FC5926",
+      "startBlock": 44000000,
+      "confirmations": 1,
+      "explorer": "https://testnet.bscscan.com"
     }
   ]
 }

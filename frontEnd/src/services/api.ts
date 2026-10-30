@@ -62,6 +62,12 @@ export interface SecondaryWalletResponse {
   onChainSecondaryWallet: string | null;
   isLocked?: boolean;
   canUpdate?: boolean;
+  isSecondaryWallet?: boolean;
+  primaryForThisSecondary?: string | null;
+  isReplaced?: boolean;
+  isMigrated?: boolean;
+  migratedTo?: string | null;
+  isPaused?: boolean;
   createdAt: number | null;
   updatedAt: number | null;
 }
