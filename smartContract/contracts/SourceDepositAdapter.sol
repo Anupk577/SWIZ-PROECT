@@ -9,7 +9,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract SourceDepositAdapter is AccessControl, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     IERC20 public immutable token;
-    address public immutable treasury;
+    address public treasury;
     uint256 public immutable destinationChainId;
     address public immutable destinationWrapper;
     uint256 public immutable scale;
@@ -21,9 +21,12 @@ contract SourceDepositAdapter is AccessControl, Pausable, ReentrancyGuard {
         address indexed sender,
         address indexed recipient,
         uint256 amount6,
-        uint256 sourceAmount
+        uint256 sourceAmount,
+        uint256 destinationChainId,
+        address destinationWrapper
     );
     event LimitsUpdated(uint256 minimum, uint256 maximum);
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     constructor(
         address usdt,
         address treasury_,
@@ -62,6 +65,13 @@ contract SourceDepositAdapter is AccessControl, Pausable, ReentrancyGuard {
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _limits(lo, hi);
     }
+    function setTreasury(
+        address newTreasury
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newTreasury != address(0), "Invalid treasury");
+        emit TreasuryUpdated(treasury, newTreasury);
+        treasury = newTreasury;
+    }
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
@@ -83,6 +93,14 @@ contract SourceDepositAdapter is AccessControl, Pausable, ReentrancyGuard {
             token.balanceOf(treasury) - beforeBalance == amount,
             "Non-exact deposit"
         );
-        emit Deposited(++nonce, msg.sender, recipient, amount6, amount);
+        emit Deposited(
+            ++nonce,
+            msg.sender,
+            recipient,
+            amount6,
+            amount,
+            destinationChainId,
+            destinationWrapper
+        );
     }
 }

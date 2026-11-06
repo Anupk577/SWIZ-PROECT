@@ -3,14 +3,21 @@ pragma solidity 0.8.28;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-/// Managed bridge: the dedicated relayer attests to finalized allowlisted source events.
+/// @title USDTcWrapper (Wrapped USDT Bridge Target)
+/// @notice Dedicated minting wrapper that attests to finalized allowlisted source deposits.
+/// @dev SECURITY & RELAYER ARCHITECTURE (Addressing SWZ-H-03):
+/// - Multiple bridge relayers or multisig/MPC signers can be granted `BRIDGE_RELAYER_ROLE` via AccessControlEnumerable.
+/// - The optional `maxDepositLimit` acts as a circuit breaker / maximum single-transaction mint bound to mitigate
+///   relayer compromise impact.
 contract USDTcWrapper is ERC20, AccessControlEnumerable, Pausable {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant BRIDGE_RELAYER_ROLE =
         keccak256("BRIDGE_RELAYER_ROLE");
+    uint256 public maxDepositLimit;
     mapping(bytes32 => bool) public isDepositProcessed;
     mapping(uint256 => address) public adapters;
     event SourceConfigured(uint256 indexed chainId, address adapter);
+    event MaxDepositLimitUpdated(uint256 oldLimit, uint256 newLimit);
     event DepositMinted(
         bytes32 indexed depositId,
         address indexed recipient,
@@ -52,6 +59,10 @@ contract USDTcWrapper is ERC20, AccessControlEnumerable, Pausable {
     ) public pure returns (bytes32) {
         return keccak256(abi.encode(chain, adapter, nonce));
     }
+    function setMaxDepositLimit(uint256 limit) external onlyRole(ADMIN_ROLE) {
+        emit MaxDepositLimitUpdated(maxDepositLimit, limit);
+        maxDepositLimit = limit;
+    }
     function mintDeposit(
         address recipient,
         uint256 amount,
@@ -63,6 +74,7 @@ contract USDTcWrapper is ERC20, AccessControlEnumerable, Pausable {
         require(
             recipient != address(0) &&
                 amount > 0 &&
+                (maxDepositLimit == 0 || amount <= maxDepositLimit) &&
                 sourceTx != bytes32(0) &&
                 nonce > 0 &&
                 adapters[chain] == adapter &&

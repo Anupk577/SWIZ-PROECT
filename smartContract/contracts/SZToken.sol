@@ -11,12 +11,23 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {EcosystemToken} from "./EcosystemToken.sol";
 
-/// Fixed supply, contract-custodied packages. No withdrawal or early-unlock pathway.
+/// @title Swiz Token (SZ) Core Protocol Contract
+/// @notice Fixed supply, contract-custodied packages. No withdrawal or early-unlock pathway.
+/// @dev ARCHITECTURAL NOTES (Addressing Security Audit SWZ-I-01 & SWZ-I-02):
+/// 1. Immutability & Upgradeability Rationale (SWZ-I-01):
+///    This contract is deliberately non-upgradeable and does not use proxy patterns (e.g. UUPS or Transparent Proxy).
+///    This architectural choice guarantees the 20-year cryptographic immutability of the release schedule and eliminates
+///    centralized proxy admin attack vectors, ensuring stakers that their locked collateral and FIFO queue logic cannot be mutated.
+/// 2. Scope of Emergency replaceWallet (SWZ-I-02):
+///    The `replaceWallet` function strictly transfers protocol-managed assets: contract-custodied staking packages,
+///    pending FIFO tranche unlocks, active package limits, and contract-recorded SZ token balance.
+///    It DOES NOT and CANNOT access or transfer external user tokens held outside this contract (such as self-custodied USDT).
+///    In case of compromised keys, users must separately revoke token approvals on other external dApps.
 contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     uint256 public constant INITIAL_PRICE = 1e6;
-    uint256 public constant SECONDS_PER_YEAR = 2 minutes;
+    uint256 public constant SECONDS_PER_YEAR = 365 days;
     uint256 public constant MAX_MATCHES = 200;
     IERC20 public immutable usdt;
     EcosystemToken public immutable et;
@@ -29,6 +40,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     uint256 public minPurchase = 1e6;
     uint256 public maxPurchase = 100_000e6;
     uint256 public maxActivePackages; // zero = unlimited
+    uint256 public minSZQuantity = 20;
     bool public migrationOpen = true;
     mapping(address => uint256) public activePackages;
 
@@ -73,6 +85,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     Position[] private heap;
 
     mapping(address => address) public secondaryWallets;
+    mapping(address => address) public primaryOfSecondary;
 
     event PackageCreated(
         uint256 indexed packageId,
@@ -107,6 +120,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     event AdminBuyback(uint256 spent, uint256 quantity);
     event FundsWithdrawn(uint256 amount);
     event LimitsUpdated(uint256 minimum, uint256 maximum, uint256 maxActive);
+    event MinSZQuantityUpdated(uint256 oldMin, uint256 newMin);
     event MigrationClosed();
     event OfflineRecorded(
         uint256 indexed packageId,
@@ -187,11 +201,19 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         migrationOpen = false;
         emit MigrationClosed();
     }
+    function setMinSZQuantity(uint256 minQty) external onlyRole(ADMIN_ROLE) {
+        if (minQty == 0) revert InvalidInput();
+        emit MinSZQuantityUpdated(minSZQuantity, minQty);
+        minSZQuantity = minQty;
+    }
     function setSecondaryWallet(address secondary) external whenNotPaused {
         if (pausedWallets[msg.sender]) revert InvalidInput();
         if (secondary == address(0) || secondary == msg.sender) revert InvalidInput();
         if (secondaryWallets[msg.sender] != address(0)) revert InvalidInput();
+        if (primaryOfSecondary[msg.sender] != address(0)) revert InvalidInput();
+        if (primaryOfSecondary[secondary] != address(0) || secondaryWallets[secondary] != address(0)) revert InvalidInput();
         secondaryWallets[msg.sender] = secondary;
+        primaryOfSecondary[secondary] = msg.sender;
         emit SecondaryWalletUpdated(msg.sender, secondary);
     }
     function setSecondaryWalletByAdmin(
@@ -200,7 +222,14 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     ) external onlyRole(ADMIN_ROLE) whenNotPaused {
         if (user == address(0) || newSecondary == address(0) || user == newSecondary) revert InvalidInput();
         if (secondaryWallets[user] == address(0)) revert InvalidInput();
+        if (primaryOfSecondary[newSecondary] != address(0) && primaryOfSecondary[newSecondary] != user) revert InvalidInput();
+        if (secondaryWallets[newSecondary] != address(0)) revert InvalidInput();
+        address oldSecondary = secondaryWallets[user];
+        if (oldSecondary != address(0)) {
+            delete primaryOfSecondary[oldSecondary];
+        }
         secondaryWallets[user] = newSecondary;
+        primaryOfSecondary[newSecondary] = user;
         emit SecondaryWalletUpdated(user, newSecondary);
     }
     function replaceWallet(
@@ -210,12 +239,21 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         if (
             oldWallet == address(0) ||
             newWallet == address(0) ||
-            oldWallet == newWallet
+            oldWallet == newWallet ||
+            oldWallet == treasury ||
+            oldWallet == address(this) ||
+            newWallet == treasury ||
+            newWallet == address(this)
         ) revert InvalidInput();
 
         if (
             secondaryWallets[oldWallet] != address(0) &&
             secondaryWallets[oldWallet] != newWallet
+        ) revert InvalidInput();
+
+        if (
+            primaryOfSecondary[newWallet] != address(0) &&
+            primaryOfSecondary[newWallet] != oldWallet
         ) revert InvalidInput();
 
         if (
@@ -244,10 +282,18 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         activePackages[newWallet] += activePackages[oldWallet];
         activePackages[oldWallet] = 0;
 
-        secondaryWallets[newWallet] = secondaryWallets[oldWallet] == newWallet
-            ? address(0)
-            : secondaryWallets[oldWallet];
-        delete secondaryWallets[oldWallet];
+        address oldSec = secondaryWallets[oldWallet];
+        if (oldSec != address(0)) {
+            delete primaryOfSecondary[oldSec];
+            delete secondaryWallets[oldWallet];
+            if (oldSec != newWallet) {
+                secondaryWallets[newWallet] = oldSec;
+                primaryOfSecondary[oldSec] = newWallet;
+            }
+        }
+        if (primaryOfSecondary[newWallet] == oldWallet) {
+            delete primaryOfSecondary[newWallet];
+        }
 
         uint256 bal = balanceOf(oldWallet);
         if (bal > 0) {
@@ -346,7 +392,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
         ) revert InvalidInput();
         uint256 price = getCurrentPrice();
         uint256 qty = Math.mulDiv(value, 1e6, price);
-        if (qty < 20 || qty < minSZ) revert Slippage();
+        if (qty < minSZQuantity || qty < minSZ) revert Slippage();
         usdt.safeTransferFrom(msg.sender, address(this), value);
         (uint256 matched, uint256 payout) = _match(qty, value, price, false);
         if (matched < qty) _inventory(qty - matched);
@@ -444,7 +490,13 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
             sale.price == 0 ||
             sale.price > type(uint256).max / 100 ||
             sale.value == 0 ||
-            sale.amount < 20
+            sale.amount < minSZQuantity
+        ) revert InvalidInput();
+
+        uint256 expectedValue = Math.mulDiv(sale.amount, sale.price, 1e6);
+        if (
+            sale.value < (expectedValue > 1 ? expectedValue - 1 : 0) ||
+            sale.value > expectedValue + 1
         ) revert InvalidInput();
     }
     function _inventory(uint256 qty) private {
@@ -513,7 +565,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
     }
     function withdrawTreasuryFunds(
         uint256 amount
-    ) external onlyRole(ADMIN_ROLE) nonReentrant {
+    ) external onlyRole(ADMIN_ROLE) whenNotPaused nonReentrant {
         if (amount == 0 || amount > adminFunds) revert InvalidInput();
         adminFunds -= amount;
         usdt.safeTransfer(treasury, amount);
@@ -546,7 +598,7 @@ contract SZToken is ERC20, AccessControlEnumerable, Pausable, ReentrancyGuard {
             heap.length > 0 &&
             heap[0].unlockAt <= block.timestamp
         ) {
-            if (++iterations > MAX_MATCHES) revert MatchLimit();
+            if (++iterations > MAX_MATCHES) break;
             Position memory head = heap[0];
             Package storage pkg = packages[head.packageId];
             uint256 cap = pkg.originalPrice * 100;
