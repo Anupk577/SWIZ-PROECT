@@ -684,7 +684,7 @@ function saveLocalDeposit(dep: Deposit) {
 
 async function fetchOnChainDeposits(userAddress?: string): Promise<{ onChainDeposits: Deposit[]; mintedBySourceTx: Map<string, { mintTx: string }> }> {
   try {
-    const amoyProvider = new JsonRpcProvider("https://polygon-amoy-bor-rpc.publicnode.com", CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
+    const amoyProvider = new JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
     const adapterIface = new Interface(ADAPTER_ABI);
     const wrapperIface = new Interface(WRAPPER_ABI);
 
@@ -859,7 +859,7 @@ function mergeOfflineSales(...lists: OfflineSaleRecord[][]): OfflineSaleRecord[]
 
 async function fetchOnChainOfflineSales(): Promise<OfflineSaleRecord[]> {
   try {
-    const provider = new JsonRpcProvider("https://polygon-amoy-bor-rpc.publicnode.com", CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
+    const provider = new JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
     const szContract = new Contract(
       ADDRESSES.sz,
       [
@@ -944,7 +944,7 @@ export function BridgePanel({ all = false }: { all?: boolean }) {
           ? "https://bsc-testnet-rpc.publicnode.com" 
           : d.source === 11155111
           ? "https://ethereum-sepolia-rpc.publicnode.com"
-          : "https://polygon-amoy-bor-rpc.publicnode.com";
+          : RPC;
         const srcProvider = new JsonRpcProvider(srcRpc, d.source, { staticNetwork: true, batchMaxCount: 1 });
         const srcReceipt = await srcProvider.getTransactionReceipt(d.sourceTx);
         if (srcReceipt && srcReceipt.logs) {
@@ -1516,6 +1516,10 @@ function BulkOfflineSalesSection() {
       }
 
       const dataLines = lines.slice(1);
+      if (dataLines.length > 100) {
+        setStatusMsg("Error: Maximum batch size is 100 rows per CSV upload (APP-M-08). Please split larger files into smaller batches.");
+        return;
+      }
       const parsed: ParsedBatchRow[] = [];
       const seenRefs = new Set<string>();
       const nowSec = Math.floor(Date.now() / 1000);
@@ -1586,27 +1590,32 @@ function BulkOfflineSalesSection() {
       // Display initial parsed rows immediately
       setRows([...parsed]);
 
-      // Verify on-chain uniqueness for each reference ID asynchronously
+      // APP-M-08: Verify on-chain uniqueness in throttled chunks of 10 to avoid RPC provider rate limiting
       try {
         const provider = new JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
         const szContract = new Contract(ADDRESSES.sz, SZ_ABI, provider);
 
-        const checkPromises = parsed.map(async (row) => {
-          if (row.isValid) {
-            try {
-              const refHash = hashId(row.reference);
-              const alreadyUsed = await szContract.recordedReferences(refHash);
-              if (alreadyUsed) {
-                row.isValid = false;
-                row.error = `Reference ID "${row.reference}" has already been used on-chain`;
+        const chunkSize = 10;
+        for (let i = 0; i < parsed.length; i += chunkSize) {
+          const chunk = parsed.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map(async (row) => {
+              if (row.isValid) {
+                try {
+                  const refHash = hashId(row.reference);
+                  const alreadyUsed = await szContract.recordedReferences(refHash);
+                  if (alreadyUsed) {
+                    row.isValid = false;
+                    row.error = `Reference ID "${row.reference}" has already been used on-chain`;
+                  }
+                } catch (err) {
+                  console.warn("Could not check reference uniqueness:", err);
+                }
               }
-            } catch (err) {
-              console.warn("Could not check reference uniqueness:", err);
-            }
-          }
-        });
+            })
+          );
+        }
 
-        await Promise.all(checkPromises);
         setRows([...parsed]);
       } catch (err) {
         console.warn("On-chain batch pre-check error:", err);
@@ -1630,17 +1639,23 @@ function BulkOfflineSalesSection() {
       setIsSubmitting(true);
       setStatusMsg("Verifying payment references on-chain before transaction...");
 
-      // Final check against on-chain recordedReferences to prevent reverting
+      // APP-M-08: Throttled chunk check against on-chain recordedReferences to prevent RPC timeout/reverts
       const provider = new JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
       const szContract = new Contract(ADDRESSES.sz, SZ_ABI, provider);
-      for (const r of validRows) {
-        const refHash = hashId(r.reference);
-        const isRecorded = await szContract.recordedReferences(refHash);
-        if (isRecorded) {
-          throw new Error(
-            `Payment Reference "${r.reference}" (Buyer: ${r.buyer.slice(0, 8)}...) has already been used on-chain. Please edit the CSV with a unique Reference ID.`
-          );
-        }
+      const chunkSize = 10;
+      for (let i = 0; i < validRows.length; i += chunkSize) {
+        const chunk = validRows.slice(i, i + chunkSize);
+        await Promise.all(
+          chunk.map(async (r) => {
+            const refHash = hashId(r.reference);
+            const isRecorded = await szContract.recordedReferences(refHash);
+            if (isRecorded) {
+              throw new Error(
+                `Payment Reference "${r.reference}" (Buyer: ${r.buyer.slice(0, 8)}...) has already been used on-chain. Please edit the CSV with a unique Reference ID.`
+              );
+            }
+          })
+        );
       }
 
       setStatusMsg(`Preparing 1 on-chain transaction for ${validRows.length} offline sales...`);

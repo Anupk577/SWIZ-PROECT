@@ -13,9 +13,11 @@ export class Store {
   constructor(filename = process.env.DB_PATH || path.resolve("swiz.sqlite")) {
     this.db = new DatabaseSync(filename);
     this.db.exec(`PRAGMA journal_mode=WAL;
+  PRAGMA busy_timeout=10000;
+  PRAGMA synchronous=NORMAL;
   CREATE TABLE IF NOT EXISTS cursors (key TEXT PRIMARY KEY, block INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS deposits (id TEXT PRIMARY KEY, source INTEGER NOT NULL, nonce TEXT NOT NULL, recipient TEXT NOT NULL, amount TEXT NOT NULL, sourceTx TEXT NOT NULL, blockHash TEXT NOT NULL, blockNumber INTEGER NOT NULL, state TEXT NOT NULL, mintTx TEXT, error TEXT, updated INTEGER NOT NULL);
-  CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, user TEXT NOT NULL, txHash TEXT NOT NULL, type TEXT NOT NULL, block INTEGER NOT NULL, data TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, user TEXT NOT NULL, txHash TEXT NOT NULL, type TEXT NOT NULL, block INTEGER NOT NULL, data TEXT NOT NULL, secondary_wallet TEXT, old_wallet TEXT, new_wallet TEXT);
   CREATE TABLE IF NOT EXISTS secondary_wallets (primary_wallet TEXT PRIMARY KEY, secondary_wallet TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS wallet_replacements (id TEXT PRIMARY KEY, old_wallet TEXT NOT NULL, new_wallet TEXT NOT NULL, packages_migrated INTEGER DEFAULT 0, tx_hash TEXT, timestamp INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS paused_wallets (wallet TEXT PRIMARY KEY, is_paused INTEGER NOT NULL, reason TEXT, updated_at INTEGER NOT NULL);
@@ -27,17 +29,38 @@ export class Store {
   CREATE INDEX IF NOT EXISTS idx_wallet_replacements_old ON wallet_replacements(old_wallet);
   CREATE INDEX IF NOT EXISTS idx_wallet_replacements_new ON wallet_replacements(new_wallet);
   CREATE INDEX IF NOT EXISTS idx_paused_wallets_paused ON paused_wallets(is_paused);`);
+
+    // Schema normalization migrations for indexed columns
+    try { this.db.exec("ALTER TABLE events ADD COLUMN secondary_wallet TEXT;"); } catch {}
+    try { this.db.exec("ALTER TABLE events ADD COLUMN old_wallet TEXT;"); } catch {}
+    try { this.db.exec("ALTER TABLE events ADD COLUMN new_wallet TEXT;"); } catch {}
+    try {
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_events_secondary ON events(secondary_wallet);
+        CREATE INDEX IF NOT EXISTS idx_events_old ON events(old_wallet);
+        CREATE INDEX IF NOT EXISTS idx_events_new ON events(new_wallet);
+      `);
+    } catch {}
+
     this.syncHistoricalEvents();
   }
-  transaction(fn) {
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      const result = fn();
-      this.db.exec("COMMIT");
-      return result;
-    } catch (err) {
-      this.db.exec("ROLLBACK");
-      throw err;
+  transaction(fn, maxRetries = 5) {
+    let attempts = 0;
+    while (attempts < maxRetries) {
+      try {
+        this.db.exec("BEGIN IMMEDIATE");
+        const result = fn();
+        this.db.exec("COMMIT");
+        return result;
+      } catch (err) {
+        try { this.db.exec("ROLLBACK"); } catch {}
+        attempts++;
+        if (err?.message && err.message.includes("busy") && attempts < maxRetries) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * attempts);
+          continue;
+        }
+        throw err;
+      }
     }
   }
   cursor(key, start) {
@@ -96,16 +119,31 @@ export class Store {
       )
       .all();
   }
+  purgeEventsAfterBlock(blockNumber) {
+    return this.transaction(() => {
+      this.db.prepare("DELETE FROM events WHERE block > ?").run(blockNumber);
+    });
+  }
   event(e) {
+    const dataObj = typeof e.data === "object" && e.data !== null ? e.data : safeJson(e.data, {});
+    const sec = (dataObj.secondaryWallet || dataObj.secondary_wallet || "").toLowerCase() || null;
+    const oldW = (dataObj.oldWallet || dataObj.old_wallet || "").toLowerCase() || null;
+    const newW = (dataObj.newWallet || dataObj.new_wallet || "").toLowerCase() || null;
+
     this.db
-      .prepare("INSERT OR IGNORE INTO events VALUES (?,?,?,?,?,?)")
+      .prepare(
+        "INSERT OR IGNORE INTO events (id, user, txHash, type, block, data, secondary_wallet, old_wallet, new_wallet) VALUES (?,?,?,?,?,?,?,?,?)"
+      )
       .run(
         e.id,
         e.user.toLowerCase(),
         e.txHash || "",
         e.type,
         e.block || 0,
-        JSON.stringify(e.data)
+        JSON.stringify(e.data),
+        sec,
+        oldW,
+        newW
       );
   }
   events(user) {
@@ -128,13 +166,12 @@ export class Store {
         .prepare(
           `SELECT rowid, * FROM events 
            WHERE user IN (${placeholders}) 
-              OR data LIKE '%"primaryWallet":"' || ? || '"%'
-              OR data LIKE '%"secondaryWallet":"' || ? || '"%'
-              OR data LIKE '%"oldWallet":"' || ? || '"%'
-              OR data LIKE '%"newWallet":"' || ? || '"%'
+              OR secondary_wallet IN (${placeholders})
+              OR old_wallet IN (${placeholders})
+              OR new_wallet IN (${placeholders})
            ORDER BY rowid DESC LIMIT 500`
         )
-        .all(...wallets, u, u, u, u);
+        .all(...wallets, ...wallets, ...wallets, ...wallets);
     } else {
       rows = this.db
         .prepare("SELECT rowid, * FROM events ORDER BY rowid DESC LIMIT 500")
@@ -362,52 +399,10 @@ export class Store {
         },
       });
 
-      // Automatically pause primary wallet upon secondary wallet activation
-      const pauseReason = "Automatically paused upon secondary wallet activation";
-      this.db
-        .prepare(
-          `INSERT INTO paused_wallets (wallet, is_paused, reason, updated_at)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(wallet) DO UPDATE SET is_paused=excluded.is_paused, reason=excluded.reason, updated_at=excluded.updated_at`
-        )
-        .run(p, 1, pauseReason, now);
-
-      this.db
-        .prepare("UPDATE deposits SET recipient=?, updated=? WHERE recipient=?")
-        .run(s, now, p);
-
-      this.db
-        .prepare("UPDATE events SET user=? WHERE user=?")
-        .run(s, p);
-
-      const repId = `${p}:${s}:${now}`;
-      this.db
-        .prepare(
-          "INSERT OR IGNORE INTO wallet_replacements (id, old_wallet, new_wallet, packages_migrated, tx_hash, timestamp) VALUES (?, ?, ?, ?, ?, ?)"
-        )
-        .run(repId, p, s, 0, txHash, now);
-
-      this.event({
-        id: `pause:${p}:${now}`,
-        user: p,
-        txHash: txHash || "",
-        type: "WalletPaused",
-        block: 0,
-        data: {
-          wallet: p,
-          primaryWallet: p,
-          isPaused: true,
-          reason: pauseReason,
-          txHash: txHash || "",
-          timestamp: now,
-        },
-      });
-
       return {
         primary_wallet: p,
         secondary_wallet: s,
         status: "ACTIVE",
-        is_paused: true,
         updated_at: now,
         txHash,
       };
@@ -439,9 +434,8 @@ export class Store {
         .prepare("UPDATE deposits SET recipient=?, updated=? WHERE recipient=?")
         .run(newW, now, oldW);
 
-      this.db
-        .prepare("UPDATE events SET user=? WHERE user=?")
-        .run(newW, oldW);
+      // Note: Historical events in the 'events' table remain immutable (APP-H-05).
+      // Replacement trail is recorded by inserting new audit events below rather than mutating past logs.
 
       this.db
         .prepare(

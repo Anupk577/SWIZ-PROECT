@@ -1,11 +1,26 @@
-import { Contract, JsonRpcProvider, Wallet, AbiCoder, keccak256 } from "ethers";
+import { Contract, JsonRpcProvider, FallbackProvider, Wallet, AbiCoder, keccak256, parseUnits } from "ethers";
+
+function createResilientProvider(rpcInput, chainId) {
+  if (Array.isArray(rpcInput) && rpcInput.length > 1) {
+    const providers = rpcInput.map((url, idx) => ({
+      provider: new JsonRpcProvider(url, chainId, { staticNetwork: true }),
+      priority: idx + 1,
+      weight: 1,
+      stallTimeout: 2500,
+    }));
+    return new FallbackProvider(providers, 1);
+  }
+  const url = Array.isArray(rpcInput) ? rpcInput[0] : rpcInput;
+  return new JsonRpcProvider(url, chainId, { staticNetwork: true });
+}
+
 export const ADAPTER_ABI = [
   "function token() view returns(address)",
   "function treasury() view returns(address)",
   "function scale() view returns(uint256)",
   "function destinationChainId() view returns(uint256)",
   "function destinationWrapper() view returns(address)",
-  "event Deposited(uint256 indexed nonce,address indexed sender,address indexed recipient,uint256 amount6,uint256 sourceAmount)",
+  "event Deposited(uint256 indexed nonce,address indexed sender,address indexed recipient,uint256 amount6,uint256 sourceAmount,uint256 destinationChainId,address destinationWrapper)",
 ];
 export const WRAPPER_ABI = [
   "function adapters(uint256) view returns(address)",
@@ -28,7 +43,7 @@ export class Bridge {
   constructor(config, store, { signer } = {}) {
     this.config = config;
     this.store = store;
-    this.destination = new JsonRpcProvider(config.rpc);
+    this.destination = createResilientProvider(config.rpc, config.chainId);
     const rawKey = process.env.RELAYER_PRIVATE_KEY?.trim();
     const relayerKey = rawKey ? (rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`) : null;
     this.canMint = Boolean(signer || relayerKey);
@@ -42,7 +57,7 @@ export class Bridge {
     );
     this.sources = config.sources.map((s) => ({
       ...s,
-      provider: new JsonRpcProvider(s.rpc),
+      provider: createResilientProvider(s.rpc, s.chainId),
     }));
     this.ready = false;
   }
@@ -164,19 +179,48 @@ export class Bridge {
         }
         return;
       }
+      const txOverrides = {};
       if (d.mintTx) {
-        const receipt = await this.destination.getTransactionReceipt(d.mintTx);
-        if (!receipt) return;
-        if (receipt.status === 1) return;
+        const receipt = await this.destination.getTransactionReceipt(d.mintTx).catch(() => null);
+        if (receipt) {
+          if (receipt.status === 1) {
+            this.store.update(d.id, "MINTED", d.mintTx);
+            return;
+          }
+          // Previous tx reverted on-chain; clear mintTx for fresh submission
+          d.mintTx = null;
+        } else {
+          // Transaction pending: fetch previous tx to bump gas for speedup (APP-H-03)
+          const prevTx = await this.destination.getTransaction(d.mintTx).catch(() => null);
+          if (prevTx && prevTx.nonce !== undefined) {
+            txOverrides.nonce = prevTx.nonce;
+            if (prevTx.maxPriorityFeePerGas) {
+              txOverrides.maxPriorityFeePerGas = (prevTx.maxPriorityFeePerGas * 125n) / 100n;
+            }
+          }
+        }
       }
+
       if (!this.canMint) return;
+
+      // Dynamic EIP-1559 gas fee calculation
+      try {
+        const feeData = await this.destination.getFeeData();
+        const block = await this.destination.getBlock("latest").catch(() => null);
+        const baseFee = block?.baseFeePerGas || parseUnits("120", "gwei");
+        const priority = txOverrides.maxPriorityFeePerGas || (feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * 120n) / 100n : parseUnits("35", "gwei"));
+        txOverrides.maxPriorityFeePerGas = priority;
+        txOverrides.maxFeePerGas = feeData.maxFeePerGas ? (feeData.maxFeePerGas * 135n) / 100n : (baseFee * 135n) / 100n + priority;
+      } catch {}
+
       const tx = await this.wrapper.mintDeposit(
         d.recipient,
         BigInt(d.amount),
         s.chainId,
         s.adapter,
         BigInt(d.nonce),
-        d.sourceTx
+        d.sourceTx,
+        txOverrides
       );
       this.store.update(d.id, "SUBMITTED", tx.hash);
       await tx.wait(1, 60000);

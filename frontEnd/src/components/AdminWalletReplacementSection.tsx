@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { isAddress, ZeroAddress, Contract, JsonRpcProvider } from "ethers";
 import { useUiData as useWeb3 } from "../hooks/useUiData";
 import { api, apiPost, type UserDetailsResponse } from "../services/api";
-import { EXPLORER, ADDRESSES, SZ_ABI, CHAIN_ID } from "../constants/contracts";
+import { EXPLORER, ADDRESSES, SZ_ABI, CHAIN_ID, RPC } from "../constants/contracts";
 import {
   Search,
   UserCheck,
@@ -226,7 +226,7 @@ export function AdminWalletReplacementSection() {
       }
 
       const amoyProvider = new JsonRpcProvider(
-        "https://polygon-amoy-bor-rpc.publicnode.com",
+        RPC,
         CHAIN_ID,
         { staticNetwork: true, batchMaxCount: 1 }
       );
@@ -383,7 +383,7 @@ export function AdminWalletReplacementSection() {
       }
 
       // Query on-chain data directly
-      const provider = new JsonRpcProvider("https://polygon-amoy-bor-rpc.publicnode.com", CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
+      const provider = new JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true, batchMaxCount: 1 });
       const szContract = new Contract(ADDRESSES.sz, SZ_ABI, provider);
 
       const [isPausedOnChain, secondaryOnChain, onChainPkgs, szBal] = await Promise.all([
@@ -726,7 +726,10 @@ export function AdminWalletReplacementSection() {
         }
       }
 
-      const finalTxHash = txHash || `sync_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      if (!txHash) {
+        throw new Error("On-chain replacement did not return a valid transaction hash. Off-chain synchronization aborted.");
+      }
+      const finalTxHash = txHash;
 
       // 2. Synchronize replacement in protocol records: POST /admin/replace-wallet
       try {
@@ -819,7 +822,10 @@ export function AdminWalletReplacementSection() {
         }
       }
 
-      const finalMigrationTx = replaceTxHash || txHash || `mig_${Date.now()}`;
+      const finalMigrationTx = replaceTxHash || txHash;
+      if (!finalMigrationTx) {
+        throw new Error("On-chain activation/replacement did not return a valid transaction hash. Off-chain synchronization aborted.");
+      }
 
       // 2. Best-effort sync with backend protocol database
       try {

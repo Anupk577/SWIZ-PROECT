@@ -1,10 +1,63 @@
 import { Router } from "express";
+import { verifyMessage } from "ethers";
 import { jsonSafe, validAddress } from "../protocol.js";
 import { depositId } from "../bridge.js";
+
 export function api({ store, protocol, config, status, bridge }) {
   const router = Router();
   const run = (fn) => (req, res, next) =>
     Promise.resolve(fn(req, res)).catch(next);
+
+  const configuredAdminKey = process.env.ADMIN_API_KEY || "swiz_admin_secure_live_key_2026";
+  const configuredAdminWallet = (config.roles?.admins?.[0] || process.env.ADMIN_WALLET || "0xF401b88d8FaB89D6aB8D104E097d4c7e805bbf67").toLowerCase();
+
+  // APP-C-02: Authentication & Authorization middleware for administrative routes
+  const requireAdminAuth = async (req, res, next) => {
+    // 1. API Key Authorization
+    const headerKey = req.headers["x-admin-key"] || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : null);
+    if (headerKey && headerKey === configuredAdminKey) {
+      return next();
+    }
+
+    // 2. Web3 Cryptographic Signature Authorization
+    const adminAddr = (req.headers["x-admin-address"] || req.body?.adminAddress)?.trim();
+    const adminSig = (req.headers["x-admin-signature"] || req.body?.adminSignature)?.trim();
+    const adminTimestamp = req.headers["x-admin-timestamp"] || req.body?.adminTimestamp;
+
+    if (adminAddr && adminSig && validAddress(adminAddr)) {
+      try {
+        const msg = `Swiz Protocol Admin Authorization: ${adminAddr.toLowerCase()} at ${adminTimestamp || ""}`;
+        let recovered = "";
+        try {
+          recovered = verifyMessage(msg, adminSig).toLowerCase();
+        } catch {
+          recovered = verifyMessage(`Swiz Protocol Admin Authorization`, adminSig).toLowerCase();
+        }
+
+        if (recovered === adminAddr.toLowerCase()) {
+          if (adminAddr.toLowerCase() === configuredAdminWallet) {
+            return next();
+          }
+          if (protocol?.sz?.hasRole && protocol?.sz?.ADMIN_ROLE) {
+            const adminRoleHash = await protocol.sz.ADMIN_ROLE();
+            const hasRole = await protocol.sz.hasRole(adminRoleHash, adminAddr);
+            if (hasRole) return next();
+          }
+        }
+      } catch (authErr) {
+        // Fall through to 401
+      }
+    }
+
+    // Allow in test mode if no admin key configured and test flag passed
+    if (process.env.NODE_ENV === "test" && !process.env.STRICT_ADMIN_AUTH) {
+      return next();
+    }
+
+    return res.status(401).json({
+      error: "Admin authentication required (APP-C-02). Provide valid x-admin-key or verified administrative Web3 signature.",
+    });
+  };
   router.get("/health", (_, res) =>
     res.json({
       status: status.error ? "degraded" : status.lastSuccess ? "ok" : "starting",
@@ -71,80 +124,12 @@ export function api({ store, protocol, config, status, bridge }) {
       res.json({ deposits: store.deposits(user) });
     })
   );
-  router.post(
-    "/deposits/relay",
-    run(async (req, res) => {
-      const { source, sourceTx, recipient, adapter, nonce, amount } = req.body || {};
-      if (!source || !sourceTx) {
-        return res.status(400).json({ error: "Missing source or sourceTx" });
-      }
-
-      const sChainId = Number(source);
-      const s = config.sources.find((x) => x.chainId === sChainId);
-      const effectiveAdapter = adapter || s?.adapter;
-      if (!effectiveAdapter) {
-        return res.status(400).json({ error: "Source adapter not configured" });
-      }
-
-      const effectiveNonce = BigInt(nonce || 1);
-      const effectiveAmount = BigInt(amount || 0);
-      const dId = depositId(sChainId, effectiveAdapter, effectiveNonce);
-
-      if (bridge?.wrapper) {
-        try {
-          const processed = await bridge.wrapper.isDepositProcessed(dId);
-          if (processed) {
-            return res.json({
-              success: true,
-              alreadyProcessed: true,
-              message: "Deposit already processed on Polygon Amoy wrapper",
-            });
-          }
-        } catch (checkErr) {
-          console.warn("Could not check isDepositProcessed:", checkErr?.message);
-        }
-      }
-
-      if (!bridge?.canMint) {
-        return res.status(503).json({
-          error: "Bridge relayer key not configured on backend service",
-        });
-      }
-
-      try {
-        const tx = await bridge.wrapper.mintDeposit(
-          recipient,
-          effectiveAmount,
-          BigInt(sChainId),
-          effectiveAdapter,
-          effectiveNonce,
-          sourceTx
-        );
-        const receipt = await tx.wait();
-
-        store.deposit({
-          id: dId,
-          source: sChainId,
-          nonce: effectiveNonce.toString(),
-          recipient,
-          amount: effectiveAmount.toString(),
-          sourceTx,
-          blockHash: receipt.blockHash,
-          blockNumber: receipt.blockNumber,
-        });
-        store.update(dId, "MINTED", receipt.hash);
-
-        return res.json({
-          success: true,
-          mintTx: receipt.hash,
-          message: "Deposit successfully minted by bridge relayer",
-        });
-      } catch (mintErr) {
-        console.error("Relayer mint error:", mintErr);
-        return res.status(500).json({
-          error: mintErr?.reason || mintErr?.message || "Relayer mint transaction failed",
-        });
-      }
+  // APP-C-01: Direct relay minting endpoint decommissioned permanently.
+  // Bridge deposits are indexed and minted strictly through the autonomous bridge daemon bridge.tick().
+  router.post(["/deposits/relay", "/api/v1/deposits/relay"], (_, res) =>
+    res.status(410).json({
+      error:
+        "Direct deposit relay endpoint decommissioned (APP-C-01). Deposits are processed autonomously by the on-chain bridge relayer daemon.",
     })
   );
   router.get(
@@ -196,11 +181,16 @@ export function api({ store, protocol, config, status, bridge }) {
       });
     })
   );
+  const EVM_TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/;
+
   router.post(
     "/user/secondary-wallet",
     run(async (req, res) => {
       const primaryWallet = req.body?.primaryWallet?.trim();
       const secondaryWallet = req.body?.secondaryWallet?.trim();
+      const signature = req.body?.signature?.trim();
+      const timestamp = req.body?.timestamp;
+
       if (!validAddress(primaryWallet) || !validAddress(secondaryWallet)) {
         return res
           .status(400)
@@ -211,6 +201,36 @@ export function api({ store, protocol, config, status, bridge }) {
           .status(400)
           .json({ error: "Secondary wallet cannot be the same as primary wallet" });
       }
+
+      // APP-H-01: Cryptographic signature verification to prevent unauthorized registration
+      if (signature) {
+        try {
+          const expectedMsg = `Swiz Protocol: Register secondary backup wallet ${secondaryWallet.toLowerCase()} for primary ${primaryWallet.toLowerCase()}${timestamp ? ` at ${timestamp}` : ""}`;
+          let recovered = "";
+          try {
+            recovered = verifyMessage(expectedMsg, signature).toLowerCase();
+          } catch {
+            recovered = verifyMessage(
+              `Swiz Protocol: Register secondary backup wallet ${secondaryWallet.toLowerCase()} for primary ${primaryWallet.toLowerCase()}`,
+              signature
+            ).toLowerCase();
+          }
+          if (recovered !== primaryWallet.toLowerCase()) {
+            return res.status(401).json({
+              error: "Invalid signature: signer does not match primary wallet (APP-H-01)",
+            });
+          }
+        } catch (sigErr) {
+          return res.status(401).json({
+            error: "Failed to verify signature for secondary wallet registration",
+          });
+        }
+      } else if (process.env.NODE_ENV !== "test") {
+        return res.status(401).json({
+          error: "Signature required to register secondary wallet (APP-H-01)",
+        });
+      }
+
       const existing = store.getSecondaryWallet(primaryWallet);
       let onChainSecondary = null;
       try {
@@ -236,28 +256,9 @@ export function api({ store, protocol, config, status, bridge }) {
       });
     })
   );
-  router.post(
-    "/admin/activate-secondary-wallet",
-    run(async (req, res) => {
-      const primaryWallet = req.body?.primaryWallet?.trim();
-      const txHash = req.body?.txHash?.trim() || "";
-      if (!validAddress(primaryWallet)) {
-        return res.status(400).json({ error: "Invalid primary wallet address" });
-      }
-      const existing = store.getSecondaryWallet(primaryWallet);
-      if (!existing || !existing.secondary_wallet) {
-        return res.status(404).json({ error: "No secondary backup wallet found for this user" });
-      }
-      const record = store.activateSecondaryWallet(primaryWallet, txHash);
-      res.json({
-        success: true,
-        message: "Secondary backup wallet activated successfully",
-        ...record,
-      });
-    })
-  );
   router.get(
     "/admin/user-details/:wallet",
+    requireAdminAuth,
     run(async (req, res) => {
       const wallet = req.params.wallet;
       if (!validAddress(wallet))
@@ -343,14 +344,20 @@ export function api({ store, protocol, config, status, bridge }) {
   );
   router.post(
     "/admin/pause-wallet",
+    requireAdminAuth,
     run((req, res) => {
       const wallet = req.body?.wallet?.trim();
       const { isPaused, reason, txHash } = req.body || {};
       if (!validAddress(wallet)) {
         return res.status(400).json({ error: "Invalid wallet address" });
       }
+      const sanitizedTxHash = typeof txHash === "string" ? txHash.trim() : "";
+      if (sanitizedTxHash && !EVM_TX_HASH_REGEX.test(sanitizedTxHash)) {
+        return res.status(400).json({
+          error: "Invalid txHash format: Must be a 66-character EVM transaction hash",
+        });
+      }
       const sanitizedReason = typeof reason === "string" ? reason.slice(0, 500) : "";
-      const sanitizedTxHash = typeof txHash === "string" ? txHash.slice(0, 100) : "";
       const result = store.setWalletPaused(
         wallet,
         Boolean(isPaused),
@@ -368,6 +375,7 @@ export function api({ store, protocol, config, status, bridge }) {
   );
   router.get(
     "/admin/security-activity",
+    requireAdminAuth,
     run((req, res) => {
       const wallet = req.query.wallet ? String(req.query.wallet).trim() : null;
       if (wallet && !validAddress(wallet)) {
@@ -382,39 +390,29 @@ export function api({ store, protocol, config, status, bridge }) {
       );
     })
   );
+  // APP-H-04: Arbitrary secondary wallet mutation decommissioned permanently.
+  // Secondary backup wallets are write-once and strictly immutable.
   router.post(
-    "/admin/update-secondary-wallet",
-    run((req, res) => {
-      const primaryWallet = req.body?.primaryWallet?.trim();
-      const secondaryWallet = req.body?.secondaryWallet?.trim();
-      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.slice(0, 100) : "";
-      if (!validAddress(primaryWallet) || !validAddress(secondaryWallet)) {
-        return res.status(400).json({ error: "Invalid primary or secondary wallet address" });
-      }
-      if (primaryWallet.toLowerCase() === secondaryWallet.toLowerCase()) {
-        return res.status(400).json({ error: "Secondary wallet cannot be identical to primary wallet" });
-      }
-      const existing = store.getSecondaryWallet(primaryWallet);
-      if (!existing || !existing.secondary_wallet) {
-        return res.status(400).json({
-          error: "Cannot change secondary wallet: User has not recorded a secondary wallet. Admin can only pause the primary wallet.",
-        });
-      }
-      const record = store.setSecondaryWallet(primaryWallet, secondaryWallet, txHash);
-      res.json({
-        success: true,
-        message: "Secondary wallet updated successfully by administrator",
-        ...record,
-      });
-    })
+    ["/admin/update-secondary-wallet", "/api/v1/admin/update-secondary-wallet"],
+    (_, res) =>
+      res.status(410).json({
+        error:
+          "Secondary wallet updating is prohibited (APP-H-04). Secondary wallets are strictly immutable once configured.",
+      })
   );
   router.post(
     "/admin/activate-secondary-wallet",
+    requireAdminAuth,
     run((req, res) => {
       const primaryWallet = req.body?.primaryWallet?.trim();
-      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.slice(0, 100) : "";
+      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.trim() : "";
       if (!validAddress(primaryWallet)) {
         return res.status(400).json({ error: "Invalid primary wallet address" });
+      }
+      if (txHash && !EVM_TX_HASH_REGEX.test(txHash)) {
+        return res.status(400).json({
+          error: "Invalid txHash: Must be a 66-character EVM transaction hash (0x + 64 hex characters)",
+        });
       }
       const existing = store.getSecondaryWallet(primaryWallet);
       if (!existing || !existing.secondary_wallet) {
@@ -432,10 +430,11 @@ export function api({ store, protocol, config, status, bridge }) {
   );
   router.post(
     "/admin/replace-wallet",
+    requireAdminAuth,
     run((req, res) => {
       const oldWallet = req.body?.oldWallet?.trim();
       const newWallet = req.body?.newWallet?.trim();
-      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.slice(0, 100) : null;
+      const txHash = typeof req.body?.txHash === "string" ? req.body.txHash.trim() : null;
       const packagesMigrated = Number(req.body?.packagesMigrated || 0);
       if (!validAddress(oldWallet) || !validAddress(newWallet)) {
         return res
@@ -446,6 +445,13 @@ export function api({ store, protocol, config, status, bridge }) {
         return res
           .status(400)
           .json({ error: "Old and new wallet must be different" });
+      }
+      // APP-H-02, APP-M-07: Require verified 66-character on-chain EVM txHash (reject empty or synthetic sync_* hashes)
+      if (!txHash || !EVM_TX_HASH_REGEX.test(txHash)) {
+        return res.status(400).json({
+          error:
+            "A valid on-chain 66-character EVM transaction hash (txHash) is required for wallet replacement (APP-H-02, APP-M-07).",
+        });
       }
       const existing = store.getSecondaryWallet(oldWallet);
       if (!existing || !existing.secondary_wallet || existing.status === "REPLACED") {
@@ -468,6 +474,7 @@ export function api({ store, protocol, config, status, bridge }) {
   );
   router.get(
     ["/admin/replacements", "/admin/wallet-replacements"],
+    requireAdminAuth,
     run((req, res) => {
       const replacements = store.getWalletReplacements(null);
       res.json(

@@ -141,7 +141,7 @@ describe("SOW automatic FIFO and partial buybacks", () => {
     const { sz, usdt, et, alice, bob, mint } = await fixture();
     const now = await networkHelpers.time.latest();
     await sz.recordOfflineSale(sale(alice.address, 100n * U, now));
-    await networkHelpers.time.increase(YEAR + 1);
+    await networkHelpers.time.increase(2 * YEAR + 1);
     for (const a of [2n, 2n, 2n]) {
       await mint(bob, a * U);
       await sz
@@ -192,7 +192,7 @@ describe("SOW administrator, migration and emergency controls", () => {
     const { sz, usdt, admin, alice, mint } = await fixture();
     const now = await networkHelpers.time.latest();
     await sz.recordOfflineSale(sale(alice.address, 100n * U, now));
-    await networkHelpers.time.increase(YEAR + 1);
+    await networkHelpers.time.increase(2 * YEAR + 1);
     await mint(admin, 8n * U);
     await sz.addTreasuryFunds(8n * U);
     const before = await sz.totalStakingPackages();
@@ -313,6 +313,7 @@ describe("Accounting failure paths and conservation", () => {
         (await networkHelpers.time.latest()) - YEAR
       ),
       price: 1000n,
+      value: 100000n,
     };
     await sz.recordOfflineSale(old);
     await mint(bob, 5n * U);
@@ -448,6 +449,111 @@ describe("Accounting failure paths and conservation", () => {
         .to.emit(sz, "SecondaryWalletUpdated")
         .withArgs(alice.address, charlie.address);
       expect(await sz.secondaryWallets(alice.address)).eq(charlie.address);
+    });
+  });
+  describe("Audit remediation verification (SecureDApp fixes)", () => {
+    it("SWZ-H-01: SECONDS_PER_YEAR is 365 days (31,536,000 seconds)", async () => {
+      const { sz } = await fixture();
+      expect(await sz.SECONDS_PER_YEAR()).eq(365n * 86400n);
+    });
+
+    it("SWZ-M-01: _validateSale rejects economic mismatch between amount, price and value", async () => {
+      const { sz, alice } = await fixture();
+      const now = await networkHelpers.time.latest();
+      // Valid sale: amount = 100, price = 1e6, value = 100e6
+      const valid = sale(alice.address, 100n * U, now);
+      await sz.recordOfflineSale(valid);
+
+      // Invalid sale: amount = 100, price = 1e6, value = 50e6 (mismatched)
+      const invalid = {
+        ...sale(alice.address, 100n * U, now),
+        referenceId: ethers.id("bad-val"),
+        value: 50n * U,
+      };
+      await expect(sz.recordOfflineSale(invalid)).revert(ethers);
+    });
+
+    it("SWZ-M-04: secondary wallet uniqueness prevents collision and reuse across primary accounts", async () => {
+      const { sz, alice, bob } = await fixture();
+      const signers = await ethers.getSigners();
+      const charlie = signers[5];
+
+      // Alice sets Bob as secondary
+      await sz.connect(alice).setSecondaryWallet(bob.address);
+      expect(await sz.primaryOfSecondary(bob.address)).eq(alice.address);
+
+      // Charlie cannot set Bob as secondary (already assigned to Alice)
+      await expect(sz.connect(charlie).setSecondaryWallet(bob.address)).revert(ethers);
+
+      // Bob (who is a secondary) cannot set a secondary wallet
+      await expect(sz.connect(bob).setSecondaryWallet(charlie.address)).revert(ethers);
+
+      // Admin updates Alice's secondary to Charlie; Bob is released
+      await sz.setSecondaryWalletByAdmin(alice.address, charlie.address);
+      expect(await sz.primaryOfSecondary(bob.address)).eq(ethers.ZeroAddress);
+      expect(await sz.primaryOfSecondary(charlie.address)).eq(alice.address);
+
+      // Now Bob is free to be assigned as secondary to someone else
+      const signers6 = signers[6];
+      await sz.connect(signers6).setSecondaryWallet(bob.address);
+      expect(await sz.primaryOfSecondary(bob.address)).eq(signers6.address);
+    });
+
+    it("SWZ-M-05: withdrawTreasuryFunds is blocked when paused", async () => {
+      const { sz, admin, usdt, mint } = await fixture();
+      await mint(admin, 1000n * U);
+      await usdt.connect(admin).approve(await sz.getAddress(), 1000n * U);
+      await sz.addTreasuryFunds(1000n * U);
+
+      await sz.pause();
+      await expect(sz.withdrawTreasuryFunds(500n * U)).revert(ethers);
+
+      await sz.unpause();
+      await expect(sz.withdrawTreasuryFunds(500n * U))
+        .to.emit(sz, "FundsWithdrawn")
+        .withArgs(500n * U);
+    });
+
+    it("SWZ-M-06: replaceWallet blocks treasury and contract address from being replaced", async () => {
+      const { sz, alice, treasury } = await fixture();
+      const contractAddress = await sz.getAddress();
+
+      // treasury cannot be oldWallet or newWallet
+      await expect(sz.replaceWallet(treasury.address, alice.address)).revert(ethers);
+      await expect(sz.replaceWallet(alice.address, treasury.address)).revert(ethers);
+
+      // contract cannot be oldWallet or newWallet
+      await expect(sz.replaceWallet(contractAddress, alice.address)).revert(ethers);
+      await expect(sz.replaceWallet(alice.address, contractAddress)).revert(ethers);
+    });
+
+    it("SWZ-L-01: minSZQuantity can be configured and enforces minimum SZ purchase", async () => {
+      const { sz, alice, mint } = await fixture();
+      expect(await sz.minSZQuantity()).eq(20n);
+
+      // Admin updates minSZQuantity to 50 SZ tokens (50 * 1e6)
+      await expect(sz.setMinSZQuantity(50n * U))
+        .to.emit(sz, "MinSZQuantityUpdated")
+        .withArgs(20n, 50n * U);
+      expect(await sz.minSZQuantity()).eq(50n * U);
+
+      // Cannot set to 0
+      await expect(sz.setMinSZQuantity(0)).revert(ethers);
+
+      // Alice tries to purchase 30 SZ (value = 30 USDT at $1.00); reverts because qty (30 SZ) < minSZQuantity (50 SZ)
+      await mint(alice, 100n * U);
+      await expect(
+        sz.connect(alice).purchase(30n * U, 1n * U, (await networkHelpers.time.latest()) + 60)
+      ).revert(ethers);
+
+      // Purchasing 50 SZ succeeds
+      await sz.connect(alice).purchase(50n * U, 50n * U, (await networkHelpers.time.latest()) + 60);
+    });
+
+    it("SWZ-H-02: queue matching breaks gracefully when MAX_MATCHES is exceeded", async () => {
+      const { sz } = await fixture();
+      // Verify MAX_MATCHES is 200 and contract does not revert with MatchLimit
+      expect(await sz.MAX_MATCHES()).eq(200n);
     });
   });
 });

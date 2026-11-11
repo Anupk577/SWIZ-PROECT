@@ -11,6 +11,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { useWeb3 } from "../context/Web3Context";
+import { CHAIN_ID } from "../constants/contracts";
 import { AdminOperations, type AdminTab } from "./ProtocolOperations";
 
 const tabs = [
@@ -25,7 +26,7 @@ const tabs = [
 ] as const;
 
 export function AdminPanelSection() {
-  const { isAdmin, connected, connect, stats } = useWeb3();
+  const { isAdmin, connected, connect, stats, address } = useWeb3();
   const [tab, setTab] = useState<AdminTab>("offchain");
 
   if (!isAdmin)
@@ -78,7 +79,7 @@ export function AdminPanelSection() {
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-card-sub)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--ink)]">
               <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-              <span>Polygon Amoy (80002)</span>
+              <span>{CHAIN_ID === 137 ? "Polygon Mainnet (137)" : "Polygon Amoy (80002)"}</span>
             </div>
 
             <div
@@ -95,6 +96,14 @@ export function AdminPanelSection() {
               ></span>
               <span>{stats?.paused ? "Protocol Paused" : "Protocol Online & Active"}</span>
             </div>
+
+            {address && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#8B1A1A]/10 border border-[#8B1A1A]/30 text-xs font-mono font-bold text-[var(--ink)]">
+                <Shield className="w-3.5 h-3.5 text-[#8B1A1A]" />
+                <span className="text-[var(--mid)]">Admin:</span>
+                <span className="text-[#8B1A1A]">{address.slice(0, 6)}...{address.slice(-4)}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -61,8 +61,15 @@ export async function indexProtocol({ provider, sz }, store, config) {
     }
     if (!event) continue;
     const block = await provider.getBlock(log.blockNumber);
-    if (!block || block.hash !== log.blockHash)
-      throw Error("Destination finality changed");
+    if (!block || block.hash !== log.blockHash) {
+      // Reorg recovery (APP-M-04): Rewind cursor by 20 blocks and purge unconfirmed event rows
+      const rewindBlock = Math.max(config.startBlock, from - 20);
+      store.setCursor("events", rewindBlock);
+      if (typeof store.purgeEventsAfterBlock === "function") {
+        store.purgeEventsAfterBlock(rewindBlock);
+      }
+      throw Error(`Destination finality changed; rewound cursor to ${rewindBlock} for clean re-sync`);
+    }
     const data = {};
     event.fragment.inputs.forEach((input, i) => {
       data[input.name] = jsonSafe(event.args[i]);

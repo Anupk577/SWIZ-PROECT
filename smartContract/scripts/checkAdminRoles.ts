@@ -7,7 +7,7 @@ async function main() {
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log("Deployer balance (POL):", ethers.formatEther(balance));
 
-  const targetAdmin = "0x32D716c34A94010D8a8f5e8b3e29C210Ed16349F";
+  const targetAdmin = "0xF401b88d8FaB89D6aB8D104E097d4c7e805bbf67";
   const DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000";
   const ADMIN_ROLE = ethers.keccak256(ethers.toUtf8Bytes("ADMIN_ROLE"));
 

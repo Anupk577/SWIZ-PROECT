@@ -11,7 +11,7 @@ import {
 import { Hero3DCanvas } from "../components/Hero3DCanvas";
 import { ProtocolAnalyticsCharts } from "../components/ProtocolAnalyticsCharts";
 import { useUiData as useWeb3 } from "../hooks/useUiData";
-import { EXPLORER } from "../constants/contracts";
+import { EXPLORER, CHAIN_ID } from "../constants/contracts";
 
 export const HomePage: React.FC = () => {
   const { protocolStats, walletState, ready, connectWallet } = useWeb3();
@@ -149,7 +149,7 @@ export const HomePage: React.FC = () => {
         <div className="w-full bg-[#8B1A1A] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 text-sm font-mono tracking-wider uppercase font-semibold">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
-            <span>SWIZ PROTOCOL ECOSYSTEM • DEPLOYED ON POLYGON AMOY</span>
+            <span>SWIZ PROTOCOL ECOSYSTEM • DEPLOYED ON {CHAIN_ID === 137 ? "POLYGON MAINNET" : "POLYGON AMOY"}</span>
           </div>
           <div className="flex items-center gap-5 font-cond font-bold">
             <a

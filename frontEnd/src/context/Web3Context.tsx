@@ -29,6 +29,7 @@ import {
   WRAPPER_ABI,
   TOKEN_ABI,
   ADAPTER_ABI,
+  PROTOCOL_ADMIN,
 } from "../constants/contracts";
 import type { Source, SecondaryWalletResponse } from "../services/api";
 import { api, apiPost } from "../services/api";
@@ -143,7 +144,7 @@ export function decodeWeb3Error(e: any): string {
     return "Execution reverted (Slippage): Slippage limit exceeded.";
   }
   if (errStr.includes("AccessControl") || errStr.includes("0xf8a8fd6d") || errStr.includes("missing role")) {
-    return "Execution reverted (Unauthorized): Connected wallet is not authorized as Administrator on Polygon Amoy.";
+    return "Execution reverted (Unauthorized): Connected wallet is not authorized as Administrator on Polygon.";
   }
   if (errStr.includes("user rejected") || errStr.includes("ACTION_REJECTED")) {
     return "Transaction was cancelled in your wallet.";
@@ -164,10 +165,11 @@ const fallbackProviders = RPC_ENDPOINTS.map((url, i) => ({
   }),
   priority: i + 1,
   weight: 1,
+  stallTimeout: 1500,
 }));
 const reader =
   fallbackProviders.length > 1
-    ? new FallbackProvider(fallbackProviders, CHAIN_ID)
+    ? new FallbackProvider(fallbackProviders, CHAIN_ID, { quorum: 1 })
     : fallbackProviders[0].provider;
 const contract = () => {
   if (!configured)
@@ -457,59 +459,31 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const readPackages = useCallback(
     async (who: string, options?: { includeMigrated?: boolean }) => {
       if (!isAddress(who)) throw Error("Invalid wallet");
-      const normWho = who.toLowerCase();
+      const c = contract();
 
-      // Check if who is an authorized secondary recovery wallet
-      const isSecWallet =
-        localStorage.getItem(`sz_is_sec_${normWho}`) === "true" ||
-        Boolean(localStorage.getItem(`sz_sec_for_${normWho}`));
-
-      // If who is a PRIMARY wallet (not secondary), check if its secondary backup wallet is active
-      if (!isSecWallet && !options?.includeMigrated) {
-        const localSec = localStorage.getItem(`sz_sec_wallet_${normWho}`);
-        const localStatus = localStorage.getItem(`sz_sec_status_${normWho}`);
-        const localMigratedTo = localStorage.getItem(`sz_migrated_to_${normWho}`);
-
-        if (
-          localMigratedTo ||
-          (localStatus === "ACTIVE" && localSec) ||
-          (localStatus === "REPLACED" && localSec)
-        ) {
-          // Primary wallet with active secondary wallet: packages moved to secondary recovery wallet!
-          return [];
-        }
-
-        // Also check on-chain secondary wallet directly
+      // APP-H-08: Query on-chain state directly instead of trusting tamperable localStorage
+      if (!options?.includeMigrated) {
         try {
-          const c = contract();
-          const onChainSec = await c.secondaryWallets(who);
+          const onChainSec = await c.secondaryWallets(who).catch(() => null);
           if (onChainSec && onChainSec !== "0x0000000000000000000000000000000000000000") {
-            try {
-              localStorage.setItem(`sz_migrated_to_${normWho}`, onChainSec.toLowerCase());
-              localStorage.setItem(`sz_sec_wallet_${normWho}`, onChainSec);
-              localStorage.setItem(`sz_sec_status_${normWho}`, "ACTIVE");
-              localStorage.setItem(`sz_is_paused_${normWho}`, "true");
-            } catch {}
             return [];
           }
         } catch {}
       }
 
-      const c = contract();
       let ids: bigint[] = await c.getUserPackageIds(who).catch(() => []);
 
-      // Fallback: If this wallet is an active/replaced secondary recovery wallet and has no on-chain package IDs yet,
-      // seamlessly check the associated primary wallet's package IDs
+      // If who is an active secondary wallet, check primaryOfSecondary on-chain mapping
       if (ids.length === 0) {
-        const prim =
-          localStorage.getItem(`sz_sec_for_${normWho}`) ||
-          localStorage.getItem(`sz_migrated_from_${normWho}`);
-        if (prim && isAddress(prim)) {
-          const primIds: bigint[] = await c.getUserPackageIds(prim).catch(() => []);
-          if (primIds.length > 0) {
-            ids = primIds;
+        try {
+          if (typeof c.primaryOfSecondary === "function") {
+            const primary = await c.primaryOfSecondary(who).catch(() => null);
+            if (primary && primary !== "0x0000000000000000000000000000000000000000") {
+              const primIds: bigint[] = await c.getUserPackageIds(primary).catch(() => []);
+              if (primIds.length > 0) ids = primIds;
+            }
           }
-        }
+        } catch {}
       }
 
       return Promise.all(
@@ -631,12 +605,9 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         // 3. Check on-chain pause mapping directly
         const onChainPaused = await c.pausedWallets(address).catch(() => false);
         const localPaused = localStorage.getItem(`sz_is_paused_${normAddr}`) === "true";
-        const isKnownFrozen =
-          normAddr === "0x519512475ed7badc7eccadf580e7cd58b886dc86" ||
-          normAddr === "0x6e3e1f572576208becc1e6e0dff3562168922a20";
 
         let userPaused = Boolean(
-          onChainPaused || localPaused || isPrimaryWithActiveSec || isKnownFrozen
+          onChainPaused || localPaused || isPrimaryWithActiveSec
         );
         let pReason = "";
         if (isPrimaryWithActiveSec && effectiveSec) {
@@ -655,9 +626,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
           usdtMockContract.balanceOf(address).catch(() => 0n),
           usdtcWrapperContract.balanceOf(address).catch(() => 0n),
         ]);
-        const isTargetAdmin =
-          normAddr === "0x32d716c34a94010d8a8f5e8b3e29c210ed16349f" ||
-          normAddr === "0x743b5509cc84415a9e1e20951e2fd94d05e423e9";
+        // APP-H-07: Admin strictly determined by on-chain ADMIN_ROLE or official PROTOCOL_ADMIN
+        const isTargetAdmin = normAddr === PROTOCOL_ADMIN.toLowerCase();
         admin = Boolean(adminRole || isTargetAdmin);
         if (isTargetAdmin) {
           userPaused = false;
@@ -752,9 +722,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (address && isConnected) {
       const isExplicitAdmin =
-        isAdmin ||
-        address.toLowerCase() === "0x32d716c34a94010d8a8f5e8b3e29c210ed16349f" ||
-        address.toLowerCase() === "0x743b5509cc84415a9e1e20951e2fd94d05e423e9";
+        isAdmin || address.toLowerCase() === PROTOCOL_ADMIN.toLowerCase();
       if (isExplicitAdmin) {
         setIsSecondaryWalletModalOpen(false);
         return;
@@ -772,8 +740,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       void fetchSecondaryWallet(address).then((res) => {
         if (
           isAdmin ||
-          address.toLowerCase() === "0x32d716c34a94010d8a8f5e8b3e29c210ed16349f" ||
-          address.toLowerCase() === "0x743b5509cc84415a9e1e20951e2fd94d05e423e9"
+          address.toLowerCase() === PROTOCOL_ADMIN.toLowerCase()
         )
           return;
         const sec = typeof res === "object" && res !== null ? res.secondaryWallet : res;
@@ -815,11 +782,19 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       throw new Error("Secondary wallet cannot be the same as primary wallet.");
     }
 
-    // 1. Submit to protocol database with status PENDING_ACTIVATION
+    // APP-H-01: Cryptographic signature to authenticate registration
+    const s = await signer();
+    const timestamp = Date.now();
+    const message = `Swiz Protocol: Register secondary backup wallet ${secAddr.toLowerCase()} for primary ${address.toLowerCase()} at ${timestamp}`;
+    const signature = await s.signMessage(message);
+
+    // 1. Submit to protocol database with verified signature
     try {
       await apiPost("/user/secondary-wallet", {
         primaryWallet: address,
         secondaryWallet: secAddr,
+        signature,
+        timestamp,
       });
     } catch (apiErr: any) {
       console.warn("Backend API sync notice (offline or static host):", apiErr?.message);
@@ -870,6 +845,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         try {
           const isBscTestnet = targetChainId === 97;
           const isSepolia = targetChainId === 11155111;
+          const isPolygonMainnet = targetChainId === 137;
           const chainParams = isBscTestnet
             ? {
                 chainId: hexChainId,
@@ -885,6 +861,14 @@ export function Web3Provider({ children }: { children: ReactNode }) {
                 nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
                 rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"],
                 blockExplorerUrls: ["https://sepolia.etherscan.io"],
+              }
+            : isPolygonMainnet
+            ? {
+                chainId: hexChainId,
+                chainName: "Polygon Mainnet",
+                nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+                rpcUrls: RPC_ENDPOINTS,
+                blockExplorerUrls: [EXPLORER],
               }
             : {
                 chainId: hexChainId,
@@ -931,6 +915,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
             ? "BNB Smart Chain Testnet (Chain ID 97)"
             : chain === 11155111
             ? "Ethereum Sepolia Testnet (Chain ID 11155111)"
+            : chain === 137
+            ? "Polygon Mainnet (Chain ID 137)"
             : `Polygon Amoy Testnet (Chain ID ${chain})`;
         throw Error(`Please switch your wallet network to ${chainName}.`);
       }
@@ -1219,9 +1205,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         openSecondaryWalletModal: () => {
           if (
             isAdmin ||
-            (address &&
-              (address.toLowerCase() === "0x32d716c34a94010d8a8f5e8b3e29c210ed16349f" ||
-                address.toLowerCase() === "0x743b5509cc84415a9e1e20951e2fd94d05e423e9")) ||
+            (address && address.toLowerCase() === PROTOCOL_ADMIN.toLowerCase()) ||
             isSecondaryWallet ||
             isWalletMigrated
           )

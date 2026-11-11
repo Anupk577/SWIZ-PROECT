@@ -69,14 +69,14 @@ function Layout() {
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </>
           ) : (
-            /* USER VIEW: Home, Dashboard, Buy, Bridge */
+            /* USER VIEW: Home, Dashboard, Buy, Bridge (APP-H-07: Admin route strictly blocked for non-admins) */
             <>
               <Route path="/" element={<HomePage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/buy" element={<BuyTokenPage />} />
               <Route path="/bridge" element={<DepositPage />} />
               <Route path="/deposit" element={<DepositPage />} />
-              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
           )}

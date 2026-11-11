@@ -1,8 +1,8 @@
 import { createAppKit } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
-import { polygonAmoy, bscTestnet, bsc, mainnet, sepolia } from "@reown/appkit/networks";
+import { polygon, polygonAmoy, bscTestnet, bsc, mainnet, sepolia } from "@reown/appkit/networks";
 import { ConnectionController } from "@reown/appkit-controllers";
-import { RPC_ENDPOINTS } from "../constants/contracts";
+import { RPC_ENDPOINTS, CHAIN_ID } from "../constants/contracts";
 
 // Bridge extension RDNS on window.ethereum so AppKit checkInstalled detects browser extensions directly
 if (typeof window !== "undefined" && (window as any).ethereum) {
@@ -20,12 +20,25 @@ if (typeof window !== "undefined" && (window as any).ethereum) {
   } catch {}
 }
 
+const customPolygon = {
+  ...polygon,
+  rpcUrls: {
+    ...polygon.rpcUrls,
+    default: {
+      http: RPC_ENDPOINTS,
+    },
+  },
+};
+
 const customPolygonAmoy = {
   ...polygonAmoy,
   rpcUrls: {
     ...polygonAmoy.rpcUrls,
     default: {
-      http: RPC_ENDPOINTS,
+      http: [
+        "https://rpc-amoy.polygon.technology",
+        "https://polygon-amoy-bor-rpc.publicnode.com",
+      ],
     },
   },
 };
@@ -40,10 +53,12 @@ const getOrigin = () => {
 const origin = getOrigin();
 const iconUrl = `${origin}/swiz-logo-nav.jpg`;
 
+const activeDefaultNetwork = CHAIN_ID === 137 ? customPolygon : customPolygonAmoy;
+
 export const appKitModal = createAppKit({
   adapters: [new EthersAdapter()],
-  networks: [customPolygonAmoy, bscTestnet, bsc, mainnet, sepolia],
-  defaultNetwork: customPolygonAmoy,
+  networks: [customPolygon, customPolygonAmoy, bscTestnet, bsc, mainnet, sepolia],
+  defaultNetwork: activeDefaultNetwork,
   projectId: import.meta.env.VITE_REOWN_PROJECT_ID || "9ce8edabce7cd1b12d6efad5b0af9c5f",
   metadata: {
     name: "Swiz Smart",
@@ -69,4 +84,3 @@ export const openAppKit = async (options?: any) => {
   } catch {}
   return appKitModal.open(options);
 };
-

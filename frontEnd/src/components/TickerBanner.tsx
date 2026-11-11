@@ -1,5 +1,6 @@
 import React from "react";
 import { useUiData as useWeb3 } from "../hooks/useUiData";
+import { CHAIN_ID } from "../constants/contracts";
 
 export const TickerBanner: React.FC = () => {
   const { protocolStats, ready } = useWeb3();
@@ -15,7 +16,7 @@ export const TickerBanner: React.FC = () => {
     { label: "PRICE FORMULA", value: "+2.33% / STEP" },
     { label: "UNLOCK SCHEDULE", value: "20-YEAR LINEAR (5% / YR)" },
     { label: "MATCHING ENGINE", value: "FIFO RECONCILED" },
-    { label: "NETWORK", value: "POLYGON AMOY (80002)" },
+    { label: "NETWORK", value: CHAIN_ID === 137 ? "POLYGON MAINNET (137)" : "POLYGON AMOY (80002)" },
     { label: "CONTRACT CUSTODY", value: "NON-CUSTODIAL MULTI-SIG" },
     { label: "BUYBACK LIQUIDITY", value: "USDT.c AUTOMATED" },
     { label: "ZERO IMPERMANENT LOSS", value: "GUARANTEED STAKING TRANCHES" },

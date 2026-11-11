@@ -29,7 +29,7 @@ export default defineConfig({
         settings: {
           optimizer: {
             enabled: true,
-            runs: 999999,
+            runs: 200,
           },
         },
       },
@@ -38,7 +38,7 @@ export default defineConfig({
         settings: {
           optimizer: {
             enabled: true,
-            runs: 999999,
+            runs: 200,
           },
         },
       },
@@ -65,6 +65,12 @@ export default defineConfig({
       type: "http",
       chainType: "generic",
       url: POLYGON_AMOY_RPC,
+      accounts: deployerPrivateKey ? [deployerPrivateKey] : [],
+    },
+    polygon: {
+      type: "http",
+      chainType: "generic",
+      url: process.env.POLYGON_MAINNET_RPC_URL || "https://polygon.drpc.org",
       accounts: deployerPrivateKey ? [deployerPrivateKey] : [],
     },
     baseSepolia: {

@@ -30,7 +30,9 @@ export function useUiData() {
       address: v.address ?? null,
       isAdmin: v.isAdmin,
       networkName:
-        CHAIN_ID === 80002
+        CHAIN_ID === 137
+          ? "Polygon Mainnet"
+          : CHAIN_ID === 80002
           ? "Polygon Amoy"
           : CHAIN_ID === 84532
           ? "Base Sepolia"
